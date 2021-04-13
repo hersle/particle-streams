@@ -4,73 +4,23 @@ using Plots
 using Printf
 gr(dpi=100, fmt=:png);
 
-@enum Interaction HARD SOFT
-INTERACTION = HARD
+struct Simulation
+	N::Int64
 
-a = 0.2
-m = 1.0
-#R = 5.0
-K = 25.0
-ϵ = 10.0
+	radius::Float64
+
+	times::AbstractArray
+	positions::Array{Tuple{Float64, Float64}, 2}
+	velocities::Array{Tuple{Float64, Float64}, 2}
+
+	scatterlines::Array{Float64}
+	scatters::Array{Array{Tuple{Int64, Float64}}}
+end
 
 STATE_PLOT_SIZE = 400
 WIDTH = 15.0
 HEIGHT = 15.0
 V0 = 5.0
-
-function force_wall(pos)
-    y = pos[2]
-    if pos[2] < 0
-        return K * -1 .* (0, y)
-    else
-        return (0, 0)
-    end
-end
-
-function potential_wall(pos)
-    y = pos[2]
-    if y > 0
-        return 0
-    else
-        return K/2 * y^2
-    end
-end
-
-function force_part(i, j, positions)
-    rij = positions[j] .- positions[i]
-    r = norm(rij)
-    if i == j || r > a
-        return (0, 0)
-    else
-        return (-12 * ϵ * ((a/r)^12 - (a/r)^6) / r^2) .* rij
-    end
-end
-
-function force_parts(i, positions)
-    N = length(positions)
-    force = (0, 0)
-    for j in 1:N
-        force = force .+ force_part(i, j, positions)
-    end
-    return force
-end
-
-function potential_part(i, j, positions)
-    rij = positions[j] .- positions[i]
-    r = norm(rij)
-    if i == j || r > a
-        return 0
-    else
-        return ϵ * ((a/r)^12 - 2*(a/r)^6 + 1)
-    end
-end
-
-function potential_parts(i, positions)
-    N = length(positions)
-    potential = sum(potential_part(i, j, positions) for j in 1:N)
-    return potential
-end
-
 
 function spawn_velocity(pos)
     #vx = rand(range(5, 6, length=50))
@@ -127,55 +77,8 @@ function interact_hard(positions, velocities, dt, acc1s)
     end
 end
 
-function interact_hard_symmetric(positions, velocities, dt, acc1s)
-    # TODO: forget this, the above one works?
-    N = length(positions)
-    for i in 1:N
-        pos1, vel1 = positions[i], velocities[i]
-        for j in i+1:N
-            pos2, vel2 = positions[j], velocities[j]
-            r = norm(pos2 .- pos1)
-            if r < 2*a && dot(vel2.-vel1,pos2.-pos1) <= 0
-                dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
-                vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
-                velocities[i] = vel1
-                velocities[j] = vel2
-            end
-        end
-    end
-    for i in 1:N
-        if positions[i][2] < 0 && velocities[i][2] < 0
-            velocities[i] = velocities[i] .* (+1, -1)
-        end
-    end
-    for i in 1:N
-        positions[i] = positions[i] .+ velocities[i] .* dt
-    end
-end
-
-function interact_soft(positions, velocities, dt, acc1s)
-    N = length(positions)
-    for n in 1:N
-        pos, vel = positions[n], velocities[n]
-        force1 = force_wall(pos) .+ force_parts(n, positions)
-        acc1 = force1 ./ m
-        acc1s[n] = acc1
-        pos = pos .+ vel .* dt .+ 1/2 .* acc1 .* dt^2
-        positions[n] = pos
-    end
-    for n in 1:N
-        pos, vel = positions[n], velocities[n]
-        force2 = force_wall(pos) .+ force_parts(n, positions)
-        acc2 = force2 ./ m
-        acc1 = acc1s[n]
-        acc = (acc1 .+ acc2) ./ 2
-        vel = vel .+ acc .* dt
-        velocities[n] = vel
-    end
-end
-
-function simulate(N, t, interaction; dt=nothing, nmoving=N)
-    mindt = 0.7 * a / V0 # 0.7 safety factor
+function simulate(N, t, interaction, radius; dt=nothing, nmoving=N)
+    mindt = 0.7 * radius / V0 # 0.7 safety factor
     dt = dt == nothing ? mindt : dt
     
     println("V0 = ", V0)
@@ -185,7 +88,7 @@ function simulate(N, t, interaction; dt=nothing, nmoving=N)
     times = 0:dt:t
     NT = length(times)
     
-    positions, velocities = spawn_particles(N; sepdist=a)
+    positions, velocities = spawn_particles(N; sepdist=radius)
     
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
     velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
@@ -215,7 +118,7 @@ function simulate(N, t, interaction; dt=nothing, nmoving=N)
 			for j in i+1:N
 				pos2, vel2 = positions[j], velocities[j]
 				r = norm(pos2 .- pos1)
-				if r < 2*a && dot(vel2.-vel1,pos2.-pos1) <= 0
+				if r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
 					dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
 					vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
 					velocities[i] = vel1
@@ -245,7 +148,6 @@ function simulate(N, t, interaction; dt=nothing, nmoving=N)
         for n in 1:N
             if out_of_bounds(positions[n])
                 # respawn
-                # pos = spawn_position(false)
                 if mod(n, 2) == 0
                     x = -WIDTH/2
                     y = (HEIGHT/5 - 0) * n/N
@@ -255,7 +157,7 @@ function simulate(N, t, interaction; dt=nothing, nmoving=N)
                 end
                 pos = (x, y)
                 
-                if position_is_available(pos, positions, sepdist=2.5*a)
+                if position_is_available(pos, positions, sepdist=2.5*radius)
                     x, y = positions[n][1], positions[n][2]
                     
                     positions[n] = pos
@@ -270,7 +172,7 @@ function simulate(N, t, interaction; dt=nothing, nmoving=N)
     end
     println()
     
-    return times, positions_samples, velocities_samples, scatterlines, scatters
+    return Simulation(N, radius, times, positions_samples, velocities_samples, scatterlines, scatters)
 end
 
 function plot_geometry(p, scatterlines=nothing)
@@ -291,12 +193,15 @@ function plot_trajectories(times, trajectories)
     return p
 end
 
-function plot_state(time, positions; velocities=nothing, scatterlines=nothing)
+# function plot_state(time, positions; velocities=nothing, scatterlines=nothing)
+function plot_state(sim::Simulation, i; velocities=nothing, scatterlines=nothing)
+	time, positions = sim.times[i], sim.positions[:,i]
+
     N = size(positions)[1]
     title = @sprintf("State for N = %d at t = %.3f", N, time)
     p = plot(title=title, xlim=(-WIDTH/2, +WIDTH/2), ylim=(0, HEIGHT), size=(STATE_PLOT_SIZE, STATE_PLOT_SIZE), legend=nothing, xlabel="x", ylabel="y")
     plot_geometry(p, scatterlines)
-    scatter!(p, positions, color=1:N, markersize=STATE_PLOT_SIZE * a/(WIDTH))
+    scatter!(p, positions, color=1:N, markersize=STATE_PLOT_SIZE * sim.radius/(WIDTH))
     if velocities != nothing
         for n in 1:N
             pos, vel = positions[n], velocities[n]
@@ -319,28 +224,31 @@ function plot_scatters(scatters_so_far)
 	return p
 end
 
-function animate_trajectories(times, trajectories, scatterlines, scatters, dt; t=nothing, fps=30)
-    t = t == nothing ? times[end] : t
-    f = Int(round(t / (times[2] - times[1]), digits=0))
-    skip = Int(round(dt / (times[2] - times[1]), digits=0))
+# function animate_trajectories(times, trajectories, scatterlines, scatters, dt; t=nothing, fps=30)
+function animate_trajectories(sim::Simulation; dt=nothing, t=nothing, fps=30)
+	dt = dt == nothing ? sim.times[2]-sim.times[1] : dt
+    t = t == nothing ? sim.times[end] : t
+    f = Int(round(t / (sim.times[2] - sim.times[1]), digits=0))
+    skip = Int(round(dt / (sim.times[2] - sim.times[1]), digits=0))
     println("skip:", skip)
 
-    trajectories = trajectories[:,1:f] # respect upper time
+    trajectories = sim.positions[:,1:f] # respect upper time
     #times = times[:Int(round(t/dt, digits=0))]
 
     N, T = size(trajectories)
-    scatters_so_far = [[] for i in 1:length(scatters)]
-	scatteri = [1 for i in 1:length(scatters)]
+    scatters_so_far = [[] for i in 1:length(sim.scatters)]
+	scatteri = [1 for i in 1:length(sim.scatters)]
     anim = @animate for t in 1:skip:T
         if true
             print("\rAnimating $N particle(s) in $(length(1:skip:T)) time steps: $(Int(round(t/T*100, digits=0))) %")
         end
 
-        p2 = plot_state(times[t], trajectories[:, t], scatterlines=scatterlines)
+        # p2 = plot_state(sim.times[t], trajectories[:, t], scatterlines=sim.scatterlines)
+        p2 = plot_state(sim, t, scatterlines=sim.scatterlines)
 
-		for j in 1:length(scatters)
-			while scatteri[j] < length(scatters[j]) && scatters[j][scatteri[j]][1] <= t
-				push!(scatters_so_far[j], scatters[j][scatteri[j]][2])
+		for j in 1:length(sim.scatters)
+			while scatteri[j] < length(sim.scatters[j]) && sim.scatters[j][scatteri[j]][1] <= t
+				push!(scatters_so_far[j], sim.scatters[j][scatteri[j]][2])
 				scatteri[j] += 1
 			end
 		end
@@ -385,6 +293,9 @@ function plot_triple(times, positions, velocities)
     return p
 end
 
-times, positions, velocities, scatterlines, scatters = simulate(250, 30, interact_hard, dt=0.01)#; dt=0.005)
-plot_triple(times, positions, velocities)
-animate_trajectories(times, positions, scatterlines, scatters, 0.1, fps=20)
+# times, positions, velocities, scatterlines, scatters = simulate(250, 30, interact_hard, dt=0.01)#; dt=0.005)
+# plot_triple(times, positions, velocities)
+# animate_trajectories(times, positions, scatterlines, scatters, 0.1, fps=20)
+
+sim = simulate(50, 10, interact_hard, 0.2, dt=0.01)
+animate_trajectories(sim, dt=0.1, fps=20)
