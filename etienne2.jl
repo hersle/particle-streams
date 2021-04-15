@@ -21,6 +21,16 @@ struct Simulation
 	scatters::Array{Array{Tuple{Int64, Float64}}}
 end
 
+function spawn_position(width, height, n, N)
+	# respawn
+	if mod(n, 2) == 0
+		return (-width/2, (height/5 - 0) * (n+0)/N)
+	else
+		return (+width/2, (height/5 - 0) * (n+1)/N)
+	end
+	return (x, y)
+end
+
 function spawn_velocity(pos, v0)
 	if pos[1] < 0
 		return (+v0, 0) # spawn on left, move to right
@@ -113,19 +123,8 @@ function simulate(N, t, radius, width, height, v0)
 
         for n in 1:N
             if out_of_bounds(width, height, positions[n])
-                # respawn
-                if mod(n, 2) == 0
-                    x = -width/2
-                    y = (height/5 - 0) * n/N
-                else
-                    x = +width/2
-                    y = (height/5 - 0) * (n+1)/N
-                end
-                pos = (x, y)
-                
-                if position_is_available(pos, positions, 2.5*radius)
-                    x, y = positions[n][1], positions[n][2]
-                    
+				pos = spawn_position(width, height, n, N)
+                if position_is_available(pos, positions, sepdist)
                     positions[n] = pos
                     velocities[n] = spawn_velocity(pos, v0)
                     side = mod1(side + 1, 2) # spawn on other side next time
