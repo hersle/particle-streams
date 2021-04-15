@@ -58,7 +58,7 @@ function out_of_bounds(width, height, pos)
     return x < -width/2 || x > +width/2 || y > +height || y < -50
 end
 
-function simulate(N, t, radius, width, height, v0)
+function simulate(N, t, radius, width, height, v0, sepdistmult)
     dt = 0.1 * radius / v0 # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     
     println("v0 = ", v0)
@@ -66,6 +66,8 @@ function simulate(N, t, radius, width, height, v0)
     
     times = 0:dt:t
     NT = length(times)
+
+	sepdist = sepdistmult * radius
     
     positions, velocities = spawn_particles(N, width, height, radius)
     
@@ -140,7 +142,7 @@ function simulate(N, t, radius, width, height, v0)
     return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, scatterlines, scatters)
 end
 
-function plot_state(sim::Simulation, i; velocity_scale=0.0, scatterlines=nothing)
+function plot_state(sim::Simulation, i, velocity_scale; scatterlines=nothing)
 	time, positions, velocities = sim.times[i], sim.positions[:,i], sim.velocities[:,i]
 
     N = size(positions)[1]
@@ -172,7 +174,7 @@ function plot_scatters(sim::Simulation, scatters_so_far)
 	return p
 end
 
-function animate_trajectories(sim::Simulation; dt=nothing, t=nothing, fps=30)
+function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histograms=false, dt=nothing, t=nothing, fps=30)
 	dt = dt == nothing ? sim.times[2]-sim.times[1] : dt
     t = t == nothing ? sim.times[end] : t
     f = Int(round(t / (sim.times[2] - sim.times[1]), digits=0))
@@ -190,21 +192,22 @@ function animate_trajectories(sim::Simulation; dt=nothing, t=nothing, fps=30)
             print("\rAnimating $N particle(s) in $(length(1:skip:T)) time steps: $(Int(round(t/T*100, digits=0))) %")
         end
 
-        p2 = plot_state(sim, t, velocity_scale=0.25, scatterlines=sim.scatterlines)
+        p2 = plot_state(sim, t; velocity_scale=velocity_scale, scatterlines=sim.scatterlines)
 
-		for j in 1:length(sim.scatters)
-			while scatteri[j] < length(sim.scatters[j]) && sim.scatters[j][scatteri[j]][1] <= t
-				push!(scatters_so_far[j], sim.scatters[j][scatteri[j]][2])
-				scatteri[j] += 1
+		if plot_histograms
+			for j in 1:length(sim.scatters)
+				while scatteri[j] < length(sim.scatters[j]) && sim.scatters[j][scatteri[j]][1] <= t
+					push!(scatters_so_far[j], sim.scatters[j][scatteri[j]][2])
+					scatteri[j] += 1
+				end
 			end
+			p1 = plot_scatters(sim, scatters_so_far)
+			plot(p1, p2, layout=(2, 1), size=(STATE_PLOT_SIZE, STATE_PLOT_SIZE*2))
 		end
-
-		p1 = plot_scatters(sim, scatters_so_far)
-        plot(p1, p2, layout=(2, 1), size=(STATE_PLOT_SIZE, STATE_PLOT_SIZE*2))
     end
     println()
     return mp4(anim, "anim.mp4", fps=fps)
 end
 
-sim = simulate(50, 10, 0.2, 15.0, 15.0, 5.0)
-animate_trajectories(sim, dt=0.1, fps=20)
+sim = simulate(1000, 10, 0.2, 15.0, 15.0, 5.0, 5.0)
+animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.30)
