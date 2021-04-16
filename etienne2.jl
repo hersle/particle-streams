@@ -174,7 +174,7 @@ function plot_scatters(sim::Simulation, scatters_so_far)
 	return p
 end
 
-function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histograms=false, dt=nothing, t=nothing, fps=30)
+function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histograms=false, dt=nothing, t=nothing, fps=30, path="anim.mp4")
 	dt = dt == nothing ? sim.times[2]-sim.times[1] : dt
     t = t == nothing ? sim.times[end] : t
     f = Int(round(t / (sim.times[2] - sim.times[1]), digits=0))
@@ -206,8 +206,11 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 		end
     end
     println()
-    return mp4(anim, "anim.mp4", fps=fps)
+    anim = mp4(anim, "anim.mp4", fps=fps)
+	run(`ffmpeg -y -i anim.mp4 -vf "crop=trunc(iw/2)*2:trunc(ih/2)*2" -pix_fmt yuv420p anim_fixed.mp4`) # convert
+	run(`mv anim_fixed.mp4 $path`)
+	return anim
 end
 
-sim = simulate(1000, 10, 0.2, 15.0, 15.0, 5.0, 5.0)
-animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.30)
+sim = simulate(100, 10, 0.2, 15.0, 15.0, 5.0, 5.0)
+animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim.mp4")
