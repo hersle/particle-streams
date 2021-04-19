@@ -58,6 +58,12 @@ function out_of_bounds(width, height, pos)
     return x < -width/2 || x > +width/2 || y > +height || y < -50
 end
 
+function pos2cell(pos, width, height, ncellsx, ncellsy) 
+	cx = clamp(1 + (pos[1]+width/2)/width*ncellsx, 1, ncellsx)
+	cy = clamp(1 + pos[2]/height*ncellsy, 1, ncellsy)
+	return Int(floor(cx)), Int(floor(cy))
+end
+
 function simulate(N, t, radius, width, height, v0, sepdistmult)
     dt = 0.1 * radius / v0 # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     
@@ -85,12 +91,57 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
     sample(1, positions, velocities)
     
     side = 1
+
+	ncellsx = 1
+	ncellsy = 1
+	cells = Array{Array{Int}, 2}(undef, ncellsx, ncellsy)
+	for cx in 1:ncellsx
+		for cy in 1:ncellsy
+			cells[cx,cy] = zeros(N) # initially everything empty
+		end
+	end
     
     for iter in 2:NT # remaining NT - 1 iterations
         if iter % Int(round(NT / 40, digits=0)) == 0 || iter == NT
             print("\rSimulating $N particle(s) in $NT time steps: $(Int(round(iter/NT*100, digits=0))) %")
         end
+
+		# place all particles in cells
+		for cx in 1:ncellsx
+			for cy in 1:ncellsy
+				resize!(cells[cx,cy], 0)
+				# println(cells[cx,cy])
+			end
+		end
+		for n in 1:N
+			pos = positions[n]
+			cx, cy = pos2cell(pos, width, height, ncellsx, ncellsy)
+			push!(cells[cx,cy], n)
+		end
+		for n1 in 1:N
+			pos1, vel1 = positions[n1], velocities[n1]
+			cx1, cy1 = pos2cell(pos1, width, height, ncellsx, ncellsy)
+			for dcx in -1:+1
+				for dcy in -1:+1
+					cx2 = cx1 + dcx
+					cy2 = cy1 + dcy
+					cx2 = clamp(cx2, 1, ncellsx)
+					cy2 = clamp(cy2, 1, ncellsy)
+					for n2 in cells[cx2,cy2]
+						pos2, vel2 = positions[n2], velocities[n2]
+						r = norm(pos2 .- pos1)
+						if n2 > n1 && r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
+							dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
+							vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
+							velocities[n1] = vel1
+							velocities[n2] = vel2
+						end
+					end
+				end
+			end
+		end
                 
+		#=
 		for i in 1:N
 			pos1, vel1 = positions[i], velocities[i]
 			for j in i+1:N
@@ -104,6 +155,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
 				end
 			end
 		end
+		=#
 		for i in 1:N
 			if positions[i][2] < 0 && velocities[i][2] < 0
 				velocities[i] = velocities[i] .* (+1, -1)
@@ -212,5 +264,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(100, 10, 0.2, 15.0, 15.0, 5.0, 5.0)
-animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim.mp4")
+sim = simulate(500, 10, 0.2, 15.0, 15.0, 5.0, 5.0)
+# animate_trajectories(sim, dt=0.01, fps=20, velocity_scale=0.00, path="anim4.mp4")
