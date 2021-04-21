@@ -19,6 +19,9 @@ struct Simulation
 
 	scatterlines::Array{Float64}
 	scatters::Array{Array{Tuple{Int64, Float64}}}
+
+	ncellsx::Int
+	ncellsy::Int
 end
 
 function spawn_position(width, height, n, N)
@@ -64,6 +67,28 @@ function pos2cell(pos, width, height, ncellsx, ncellsy)
 	return Int(floor(cx)), Int(floor(cy))
 end
 
+function pos2cells(pos, width, height, ncellsx, ncellsy)
+	# assumes that cells are chosen so one object can be at most in 4 cells
+	cx1 = Int(floor(1 + (pos[1]+width/2)/width*ncellsx - 0.5)) # -0.5 makes this the "leftmost" cell
+	cy1 = Int(floor(1 + pos[2]/height*ncellsy - 0.5))
+	cx2 = cx1 + 1
+	cy2 = cy1 + 1
+	cx1 = clamp(cx1, 1, ncellsx)
+	cx2 = clamp(cx2, 1, ncellsx)
+	cy1 = clamp(cy1, 1, ncellsy)
+	cy2 = clamp(cy2, 1, ncellsy)
+	return cx1, cy1, cx2, cy2
+end
+
+function scatter(pos1, vel1, pos2, vel2, radius)
+	r = norm(pos2 .- pos1)
+	if r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
+		dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
+		vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
+	end
+	return vel1, vel2
+end
+
 function simulate(N, t, radius, width, height, v0, sepdistmult)
     dt = 0.1 * radius / v0 # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     
@@ -92,47 +117,58 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
     
     side = 1
 
-	ncellsx = 1
-	ncellsy = 1
+	ncellsx = Int(floor(width / radius)-1) # floor & reduce, so at most 4 particles in each cell
+	ncellsy = Int(floor(height / radius)-1)
+
+	println("ncells: ($ncellsx, $ncellsy)")
+	println("radius: $radius")
+	println("cell size: ($(width/ncellsx), $(height/ncellsy))")
+
 	cells = Array{Array{Int}, 2}(undef, ncellsx, ncellsy)
 	for cx in 1:ncellsx
 		for cy in 1:ncellsy
 			cells[cx,cy] = zeros(N) # initially everything empty
+			resize!(cells[cx,cy], 0) # resize to 0 (just keep previous allocation)
 		end
 	end
+	particle_cell = Array{Tuple{Int, Int, Int}, 2}(undef, N, 4) # which 4 cells (cx,cy,idx) is a given particle in?
     
     for iter in 2:NT # remaining NT - 1 iterations
         if iter % Int(round(NT / 40, digits=0)) == 0 || iter == NT
             print("\rSimulating $N particle(s) in $NT time steps: $(Int(round(iter/NT*100, digits=0))) %")
         end
 
-		# place all particles in cells
+		# clear cells TODO: make more efficient by remembering cells for one particle
 		for cx in 1:ncellsx
 			for cy in 1:ncellsy
 				resize!(cells[cx,cy], 0)
-				# println(cells[cx,cy])
 			end
 		end
 		for n in 1:N
 			pos = positions[n]
-			cx, cy = pos2cell(pos, width, height, ncellsx, ncellsy)
-			push!(cells[cx,cy], n)
+			# TODO: delete earlier remembered position 
+			# cells[particle_cell[n][1][1],particle_cell[n][1][2]][particle_cell[n][1][3]] = 
+			cx1, cy1, cx2, cy2 = pos2cells(pos, width, height, ncellsx, ncellsy)
+			# println("$cx1 $cy1 $cx2 $cy2")
+			push!(cells[cx1,cy1], n) # add to all four cells
+			push!(cells[cx1,cy2], n)
+			push!(cells[cx2,cy1], n)
+			push!(cells[cx2,cy2], n)
+			# TODO: remember position
+			# particle_cell[n][1] = (cx1,cy1,length(cells[cx1,cy1]))
+			# particle_cell[n][2] = (cx1,cy2,length(cells[cx1,cy2]))
+			# particle_cell[n][3] = (cx2,cy1,length(cells[cx2,cy1]))
+			# particle_cell[n][4] = (cx2,cy2,length(cells[cx2,cy2]))
 		end
 		for n1 in 1:N
 			pos1, vel1 = positions[n1], velocities[n1]
-			cx1, cy1 = pos2cell(pos1, width, height, ncellsx, ncellsy)
-			for dcx in -1:+1
-				for dcy in -1:+1
-					cx2 = cx1 + dcx
-					cy2 = cy1 + dcy
-					cx2 = clamp(cx2, 1, ncellsx)
-					cy2 = clamp(cy2, 1, ncellsy)
-					for n2 in cells[cx2,cy2]
+			cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
+			for cx in cx1:cx2
+				for cy in cy1:cy2
+					for n2 in cells[cx,cy]
 						pos2, vel2 = positions[n2], velocities[n2]
-						r = norm(pos2 .- pos1)
-						if n2 > n1 && r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
-							dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
-							vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
+						if n2 != n1
+							vel1, vel2 = scatter(pos1, vel1, pos2, vel2, radius)
 							velocities[n1] = vel1
 							velocities[n2] = vel2
 						end
@@ -146,13 +182,9 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
 			pos1, vel1 = positions[i], velocities[i]
 			for j in i+1:N
 				pos2, vel2 = positions[j], velocities[j]
-				r = norm(pos2 .- pos1)
-				if r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
-					dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
-					vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
-					velocities[i] = vel1
-					velocities[j] = vel2
-				end
+				vel1, vel2 = scatter(pos1, vel1, pos2, vel2, radius)
+				velocities[i] = vel1 # TODO: why on EARTH does it not work to do velocities[i], velocities[j] = scatter()?
+				velocities[j] = vel2
 			end
 		end
 		=#
@@ -191,10 +223,10 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
     end
     println() # end progress writer
     
-    return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, scatterlines, scatters)
+    return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, scatterlines, scatters, ncellsx, ncellsy)
 end
 
-function plot_state(sim::Simulation, i, velocity_scale; scatterlines=nothing)
+function plot_state(sim::Simulation, i; velocity_scale=0.0, scatterlines=nothing, grid=false)
 	time, positions, velocities = sim.times[i], sim.positions[:,i], sim.velocities[:,i]
 
     N = size(positions)[1]
@@ -210,6 +242,9 @@ function plot_state(sim::Simulation, i, velocity_scale; scatterlines=nothing)
             plot!(p, [pos, pos .+ vel .* velocity_scale], arrow=:arrow, color=n)
         end
     end
+	if grid
+		p = plot!(p, xticks=range(-sim.width/2,+sim.width/2,length=sim.ncellsx+1), yticks=range(0,sim.height,length=sim.ncellsy+1), grid=true)
+	end
     return p
 end
 
@@ -264,5 +299,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(500, 10, 0.2, 15.0, 15.0, 5.0, 5.0)
-# animate_trajectories(sim, dt=0.01, fps=20, velocity_scale=0.00, path="anim4.mp4")
+sim = simulate(200, 10, 0.2, 15.0, 15.0, 5.0, 5.0)
+animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim4.mp4")
