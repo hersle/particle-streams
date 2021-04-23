@@ -123,12 +123,13 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
 	println("cell size: ($(width/ncellsx), $(height/ncellsy))")
 
 	# maps from cell -> particle and particle -> cell
+	celllen = Array{Int, 2}(undef, ncellsx, ncellsy)
 	cell2part = Array{Array{Tuple{Int, Int}}, 2}(undef, ncellsx, ncellsy) # (cx, cy, ci) -> (particle id, cell #1-4)
 	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
 	for cx in 1:ncellsx
 		for cy in 1:ncellsy
 			cell2part[cx,cy] = Array{Tuple{Int, Int}}(undef, N) # initially everything empty
-			resize!(cell2part[cx,cy], 0) # resize to 0 (just keep previous allocation)
+			celllen[cx,cy] = 0
 		end
 	end
 
@@ -136,22 +137,26 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
 		pos = positions[n]
 		cx1, cy1, cx2, cy2 = pos2cells(pos, width, height, ncellsx, ncellsy)
 		# println("$cx1 $cy1 $cx2 $cy2")
-		push!(cell2part[cx1,cy1], (n, 1)) # add to all four cells
-		push!(cell2part[cx1,cy2], (n, 2))
-		push!(cell2part[cx2,cy1], (n, 3))
-		push!(cell2part[cx2,cy2], (n, 4))
-		part2cell[n,1] = (cx1,cy1,length(cell2part[cx1,cy1])) # remember which cells it is in
-		part2cell[n,2] = (cx1,cy2,length(cell2part[cx1,cy2]))
-		part2cell[n,3] = (cx2,cy1,length(cell2part[cx2,cy1]))
-		part2cell[n,4] = (cx2,cy2,length(cell2part[cx2,cy2]))
+		celllen[cx1,cy1] += 1
+		celllen[cx1,cy2] += 1
+		celllen[cx2,cy1] += 1
+		celllen[cx2,cy2] += 1
+		cell2part[cx1,cy1][celllen[cx1,cy1]] = (n, 1) # add to all four cells
+		cell2part[cx1,cy2][celllen[cx1,cy2]] = (n, 2)
+		cell2part[cx2,cy1][celllen[cx2,cy1]] = (n, 3)
+		cell2part[cx2,cy2][celllen[cx2,cy2]] = (n, 4)
+		part2cell[n,1] = (cx1,cy1,celllen[cx1,cy1]) # remember which cells it is in
+		part2cell[n,2] = (cx1,cy2,celllen[cx1,cy2])
+		part2cell[n,3] = (cx2,cy1,celllen[cx2,cy1])
+		part2cell[n,4] = (cx2,cy2,celllen[cx2,cy2])
 	end
 
 	function rempart(n)
 		for i in 1:4
 			cx, cy, ci = part2cell[n,i] # this cell contains particle n
-			cell2part[cx,cy][ci] = cell2part[cx,cy][end] # remove (n,i) from cell
+			cell2part[cx,cy][ci] = cell2part[cx,cy][celllen[cx,cy]] # remove (n,i) from cell
 			part2cell[cell2part[cx,cy][ci][1],cell2part[cx,cy][ci][2]] = (cx,cy,ci) # update reverse map on new particle at (cx,cy,ci)
-			cell2part[cx,cy] = cell2part[cx,cy][1:end-1] # do after in case it is the last one
+			celllen[cx,cy] -= 1
 		end
 	end
     
@@ -174,7 +179,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
 			cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
 			for cx in cx1:cx2
 				for cy in cy1:cy2
-					for (n2, _) in cell2part[cx,cy]
+					for (n2, _) in cell2part[cx,cy][1:celllen[cx,cy]]
 						pos2, vel2 = positions[n2], velocities[n2]
 						if n2 > n1
 							vel1, vel2 = scatter(pos1, vel1, pos2, vel2, radius)
@@ -308,5 +313,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(100, 10, 0.5, 15.0, 15.0, 5.0, 5.0)
-animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim4.mp4")
+sim = simulate(400, 10, 0.5, 15.0, 15.0, 5.0, 5.0)
+# animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim4.mp4")
