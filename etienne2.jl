@@ -168,6 +168,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
         end
 
 		# clear cells TODO: make more efficient by remembering cells for one particle
+		#=
 		for n in 1:N
 			pos = positions[n]
 			# TODO: delete earlier remembered position 
@@ -192,8 +193,8 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 				end
 			end
 		end
+		=#
                 
-		#=
 		for i in 1:N
 			pos1, vel1 = positions[i], velocities[i]
 			for j in i+1:N
@@ -203,7 +204,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 				velocities[j] = vel2
 			end
 		end
-		=#
 		for i in 1:N
 			if positions[i][2] < 0 && velocities[i][2] < 0
 				velocities[i] = velocities[i] .* (+1, -1)
