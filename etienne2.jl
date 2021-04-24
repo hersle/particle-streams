@@ -105,7 +105,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
     velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
 
-	scatterlines = [3*height/3, 2*height/3, 1*height/3]
+	scatterlines = []
 	scatters = [[] for i in 1:length(scatterlines)]
     
     function sample(iter, positions, velocities)
