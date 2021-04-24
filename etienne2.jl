@@ -24,21 +24,23 @@ struct Simulation
 	ncellsy::Int
 end
 
-function spawn_position(width, height, n, N)
+function spawn_position(width, height, n, N, spawnymax)
 	# respawn
 	if mod(n, 2) == 0
-		return (-width/2, (height/5 - 0) * (n+0)/N)
+		x = -width/2
 	else
-		return (+width/2, (height/5 - 0) * (n+1)/N)
+		x = +width/2
 	end
-	return (x, y)
+	y = rand() * spawnymax
+	return (x,y)
 end
 
-function spawn_velocity(pos, v0)
+function spawn_velocity(pos, v0, spawnvelang)
+	ang = -spawnvelang/2 + spawnvelang * rand()
 	if pos[1] < 0
-		return (+v0, 0) # spawn on left, move to right
+		return (+v0*cos(ang), v0*sin(ang)) # spawn on left, move to right
 	else
-		return (-v0, 0) # spawn on right, move to left
+		return (-v0*cos(ang), v0*sin(ang)) # spawn on right, move to left
 	end
 end
 
@@ -87,7 +89,7 @@ function scatter(pos1, vel1, pos2, vel2, radius)
 	return vel1, vel2
 end
 
-function simulate(N, t, radius, width, height, v0, sepdistmult)
+function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawnvelang)
     dt = 0.1 * radius / v0 # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     
     println("v0 = ", v0)
@@ -223,10 +225,10 @@ function simulate(N, t, radius, width, height, v0, sepdistmult)
 
         for n in 1:N
             if out_of_bounds(width, height, positions[n])
-				pos = spawn_position(width, height, n, N)
+				pos = spawn_position(width, height, n, N, spawnymax)
                 if position_is_available(pos, positions, sepdist)
                     positions[n] = pos
-                    velocities[n] = spawn_velocity(pos, v0)
+                    velocities[n] = spawn_velocity(pos, v0, spawnvelang)
                     side = mod1(side + 1, 2) # spawn on other side next time
                 else
                     # then try respawning again at next time step (don't force it!)
@@ -313,5 +315,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(400, 10, 0.5, 15.0, 15.0, 5.0, 5.0)
-# animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim4.mp4")
+sim = simulate(500, 100, 0.2, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim4.mp4")
