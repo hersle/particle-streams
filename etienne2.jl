@@ -247,11 +247,11 @@ function plot_state(sim::Simulation, i; velocity_scale=0.0, scatterlines=nothing
 
     N = size(positions)[1]
     title = @sprintf("State for N = %d at t = %.3f", N, time)
-    p = plot(title=title, xlim=(-sim.width/2, +sim.width/2), ylim=(0, sim.height), size=(STATE_PLOT_SIZE, STATE_PLOT_SIZE), legend=nothing, xlabel="x", ylabel="y")
+    p = plot(title=title, xlim=(-sim.width/2, +sim.width/2), ylim=(0, sim.height), size=(STATE_PLOT_SIZE, sim.height/sim.width*STATE_PLOT_SIZE), legend=nothing, xlabel="x", ylabel="y")
 	if scatterlines != nothing
 		hline!(p, scatterlines, color=:black, lw=2, alpha=0.25)
 	end
-    scatter!(p, positions, color=1:N, markersize=STATE_PLOT_SIZE * sim.radius/(sim.width))
+    scatter!(p, positions, color=:black, markersize=STATE_PLOT_SIZE * sim.radius/(sim.width))
     if velocity_scale != 0.0
         for n in 1:N
             pos, vel = positions[n], velocities[n]
@@ -295,7 +295,7 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
             print("\rAnimating $N particle(s) in $(length(1:skip:T)) time steps: $(Int(round(t/T*100, digits=0))) %")
         end
 
-        p2 = plot_state(sim, t; velocity_scale=velocity_scale, scatterlines=sim.scatterlines, grid=true)
+        p2 = plot_state(sim, t; velocity_scale=velocity_scale, scatterlines=sim.scatterlines, grid=false)
 
 		if plot_histograms
 			for j in 1:length(sim.scatters)
