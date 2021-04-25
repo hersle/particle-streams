@@ -89,6 +89,7 @@ function scatter(pos1, vel1, pos2, vel2, radius)
 	return vel1, vel2
 end
 
+# TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawnvelang)
     dt = 0.1 * radius / v0 # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     
@@ -126,11 +127,10 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 
 	# maps from cell -> particle and particle -> cell
 	celllen = Array{Int, 2}(undef, ncellsx, ncellsy)
-	cell2part = Array{Array{Tuple{Int, Int}}, 2}(undef, ncellsx, ncellsy) # (cx, cy, ci) -> (particle id, cell #1-4)
+	cell2part = Array{Tuple{Int, Int}, 3}(undef, ncellsx, ncellsy, N) # (cx, cy, ci) -> (particle id, cell #1-4)
 	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
 	for cx in 1:ncellsx
 		for cy in 1:ncellsy
-			cell2part[cx,cy] = Array{Tuple{Int, Int}}(undef, N) # initially everything empty
 			celllen[cx,cy] = 0
 		end
 	end
@@ -143,10 +143,10 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 		celllen[cx1,cy2] += 1
 		celllen[cx2,cy1] += 1
 		celllen[cx2,cy2] += 1
-		cell2part[cx1,cy1][celllen[cx1,cy1]] = (n, 1) # add to all four cells
-		cell2part[cx1,cy2][celllen[cx1,cy2]] = (n, 2)
-		cell2part[cx2,cy1][celllen[cx2,cy1]] = (n, 3)
-		cell2part[cx2,cy2][celllen[cx2,cy2]] = (n, 4)
+		cell2part[cx1,cy1,celllen[cx1,cy1]] = (n, 1) # add to all four cells
+		cell2part[cx1,cy2,celllen[cx1,cy2]] = (n, 2)
+		cell2part[cx2,cy1,celllen[cx2,cy1]] = (n, 3)
+		cell2part[cx2,cy2,celllen[cx2,cy2]] = (n, 4)
 		part2cell[n,1] = (cx1,cy1,celllen[cx1,cy1]) # remember which cells it is in
 		part2cell[n,2] = (cx1,cy2,celllen[cx1,cy2])
 		part2cell[n,3] = (cx2,cy1,celllen[cx2,cy1])
@@ -156,8 +156,8 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 	function rempart(n)
 		for i in 1:4
 			cx, cy, ci = part2cell[n,i] # this cell contains particle n
-			cell2part[cx,cy][ci] = cell2part[cx,cy][celllen[cx,cy]] # remove (n,i) from cell
-			part2cell[cell2part[cx,cy][ci][1],cell2part[cx,cy][ci][2]] = (cx,cy,ci) # update reverse map on new particle at (cx,cy,ci)
+			cell2part[cx,cy,ci] = cell2part[cx,cy,celllen[cx,cy]] # remove (n,i) from cell
+			part2cell[cell2part[cx,cy,ci][1],cell2part[cx,cy,ci][2]] = (cx,cy,ci) # update reverse map on new particle at (cx,cy,ci)
 			celllen[cx,cy] -= 1
 		end
 	end
@@ -168,7 +168,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
         end
 
 		# clear cells TODO: make more efficient by remembering cells for one particle
-		#=
 		for n in 1:N
 			pos = positions[n]
 			# TODO: delete earlier remembered position 
@@ -182,7 +181,9 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 			cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
 			for cx in cx1:cx2
 				for cy in cy1:cy2
-					for (n2, _) in cell2part[cx,cy][1:celllen[cx,cy]]
+					#for (n2, _) in cell2part[cx,cy,1:celllen[cx,cy]]
+					for i in 1:celllen[cx,cy]
+						n2 = cell2part[cx,cy,i][1]
 						pos2, vel2 = positions[n2], velocities[n2]
 						if n2 > n1
 							vel1, vel2 = scatter(pos1, vel1, pos2, vel2, radius)
@@ -193,8 +194,8 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 				end
 			end
 		end
-		=#
                 
+		#=
 		for i in 1:N
 			pos1, vel1 = positions[i], velocities[i]
 			for j in i+1:N
@@ -204,6 +205,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 				velocities[j] = vel2
 			end
 		end
+		=#
 		for i in 1:N
 			if positions[i][2] < 0 && velocities[i][2] < 0
 				velocities[i] = velocities[i] .* (+1, -1)
@@ -315,5 +317,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(500, 100, 0.2, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
-animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim4.mp4")
+sim = simulate(20, 20, 1.0, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim.mp4")
