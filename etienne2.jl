@@ -81,13 +81,20 @@ function pos2cells(pos, width, height, ncellsx, ncellsy)
 	return cx1, cy1, cx2, cy2
 end
 
-function scatter(pos1, vel1, pos2, vel2, radius)
+function scatter_particles(pos1, vel1, pos2, vel2, radius)
 	r = norm(pos2 .- pos1)
 	if r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
 		dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
 		vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
 	end
 	return vel1, vel2
+end
+
+function scatter_wall(pos, vel, radius)
+	if pos[2] < 0 && vel[2] < 0
+		return (vel[1], -vel[2]) # reflect y-velocity
+	end
+	return vel
 end
 
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
@@ -188,30 +195,30 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
         end
 
 		for n in 1:N
-			if !alive[n]
-				continue
+			if alive[n]
+				rempart(n)
+				addpart(n)
 			end
-			rempart(n)
-			addpart(n)
 		end
 		for n1 in 1:N
-			if !alive[n1]
-				continue
-			end
-			pos1, vel1 = positions[n1], velocities[n1]
-			cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
-			for cx in cx1:cx2
-				for cy in cy1:cy2
-					for i in 1:celllen[cx,cy]
-						n2 = cell2part[cx,cy,i][1]
-						pos2, vel2 = positions[n2], velocities[n2]
-						if alive[n2] && n2 > n1
-							vel1, vel2 = scatter(pos1, vel1, pos2, vel2, radius)
-							velocities[n1] = vel1
-							velocities[n2] = vel2
+			if alive[n1]
+				pos1, vel1 = positions[n1], velocities[n1]
+				cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
+				for cx in cx1:cx2 # TODO: create some form of cleaner iteration
+					for cy in cy1:cy2
+						for i in 1:celllen[cx,cy]
+							n2 = cell2part[cx,cy,i][1]
+							pos2, vel2 = positions[n2], velocities[n2]
+							if alive[n2] && n2 > n1
+								vel1, vel2 = scatter_particles(pos1, vel1, pos2, vel2, radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
+								velocities[n1], velocities[n2] = vel1, vel2
+							end
 						end
 					end
 				end
+
+				vel1 = scatter_wall(pos1, vel1, radius)
+				velocities[n1] = vel1
 			end
 		end
                 
@@ -220,17 +227,12 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 			pos1, vel1 = positions[i], velocities[i]
 			for j in i+1:N
 				pos2, vel2 = positions[j], velocities[j]
-				vel1, vel2 = scatter(pos1, vel1, pos2, vel2, radius)
-				velocities[i] = vel1 # TODO: why on EARTH does it not work to do velocities[i], velocities[j] = scatter()?
+				vel1, vel2 = scatter_particles(pos1, vel1, pos2, vel2, radius)
+				velocities[i] = vel1 # TODO: why on EARTH does it not work to do velocities[i], velocities[j] = scatter_particles()?
 				velocities[j] = vel2
 			end
 		end
 		=#
-		for i in 1:N
-			if positions[i][2] < 0 && velocities[i][2] < 0
-				velocities[i] = velocities[i] .* (+1, -1)
-			end
-		end
 		for i in 1:N
 			newpos = positions[i] .+ velocities[i] .* dt
 
@@ -338,5 +340,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(500, 10, 0.2, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
-animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim.mp4")
+sim = simulate(40, 10, 0.5, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+animate_trajectories(sim, dt=0.01, fps=20, velocity_scale=0.00, path="anim.mp4")
