@@ -106,6 +106,10 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
     velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
 
+    side = 1 # which side to spawn on
+	nalive = 0
+	alive = fill(false, N)
+
 	scatterlines = []
 	scatters = [[] for i in 1:length(scatterlines)]
     
@@ -115,8 +119,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     end
     
     sample(1, positions, velocities)
-    
-    side = 1
 
 	ncellsx = Int(floor(width / radius)-1) # floor & reduce, so at most 4 particles in each cell
 	ncellsy = Int(floor(height / radius)-1)
@@ -161,22 +163,40 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 			celllen[cx,cy] -= 1
 		end
 	end
+
+	function kill_particle(n)
+		alive[n] = false
+		nalive -= 1
+	end
+
+	function spawn_particle(n, pos, vel)
+		alive[n] = true
+		nalive += 1
+		positions[n] = pos
+		velocities[n] = vel
+		side = mod1(side + 1, 2) # spawn on other side next time
+
+		addpart(n) # add to cells
+	end
     
     for iter in 2:NT # remaining NT - 1 iterations
         if iter % Int(round(NT / 40, digits=0)) == 0 || iter == NT
             print("\rSimulating $N particle(s) in $NT time steps: $(Int(round(iter/NT*100, digits=0))) %")
         end
 
-		# clear cells TODO: make more efficient by remembering cells for one particle
 		for n in 1:N
+			if !alive[n]
+				continue
+			end
 			pos = positions[n]
 			# TODO: delete earlier remembered position 
-			if iter > 2
-				rempart(n)
-			end
+			rempart(n)
 			addpart(n)
 		end
 		for n1 in 1:N
+			if !alive[n1]
+				continue
+			end
 			pos1, vel1 = positions[n1], velocities[n1]
 			cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
 			for cx in cx1:cx2
@@ -185,7 +205,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 					for i in 1:celllen[cx,cy]
 						n2 = cell2part[cx,cy,i][1]
 						pos2, vel2 = positions[n2], velocities[n2]
-						if n2 > n1
+						if alive[n2] && n2 > n1
 							vel1, vel2 = scatter(pos1, vel1, pos2, vel2, radius)
 							velocities[n1] = vel1
 							velocities[n2] = vel2
@@ -226,14 +246,14 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 		end
 
         for n in 1:N
-            if out_of_bounds(width, height, positions[n])
+            if alive[n] && out_of_bounds(width, height, positions[n])
+				kill_particle(n)
+			end
+			if !alive[n]
 				pos = spawn_position(width, height, n, N, spawnymax)
                 if position_is_available(pos, positions, sepdist)
-                    positions[n] = pos
-                    velocities[n] = spawn_velocity(pos, v0, spawnvelang)
-                    side = mod1(side + 1, 2) # spawn on other side next time
-                else
-                    # then try respawning again at next time step (don't force it!)
+                    vel = spawn_velocity(pos, v0, spawnvelang)
+					spawn_particle(n, pos, vel)
                 end
             end
         end
@@ -279,6 +299,7 @@ function plot_scatters(sim::Simulation, scatters_so_far)
 	return p
 end
 
+# TODO: use plotting library that shows correct radius
 function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histograms=false, dt=nothing, t=nothing, fps=30, path="anim.mp4")
 	dt = dt == nothing ? sim.times[2]-sim.times[1] : dt
     t = t == nothing ? sim.times[end] : t
@@ -317,5 +338,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(20, 20, 1.0, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+sim = simulate(200, 10, 0.2, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
 animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim.mp4")
