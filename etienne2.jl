@@ -16,6 +16,7 @@ struct Simulation
 	times::AbstractArray
 	positions::Array{Tuple{Float64, Float64}, 2}
 	velocities::Array{Tuple{Float64, Float64}, 2}
+	nalive::Array{Int}
 
 	scatterlines::Array{Float64}
 	scatters::Array{Array{Tuple{Int64, Float64}}}
@@ -105,6 +106,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
     velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
+	nalive_samples = Array{Int}(undef, NT)
 
     side = 1 # which side to spawn on
 	nalive = 0
@@ -113,12 +115,13 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 	scatterlines = []
 	scatters = [[] for i in 1:length(scatterlines)]
     
-    function sample(iter, positions, velocities)
+    function sample(iter)
         positions_samples[:, iter] = positions
         velocities_samples[:, iter] = velocities
+		nalive_samples[iter] = nalive
     end
     
-    sample(1, positions, velocities)
+    sample(1)
 
 	ncellsx = Int(floor(width / radius)-1) # floor & reduce, so at most 4 particles in each cell
 	ncellsy = Int(floor(height / radius)-1)
@@ -257,18 +260,18 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
                 end
             end
         end
-        sample(iter, positions, velocities)
+        sample(iter)
     end
     println() # end progress writer
     
-    return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, scatterlines, scatters, ncellsx, ncellsy)
+    return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, nalive_samples, scatterlines, scatters, ncellsx, ncellsy)
 end
 
 function plot_state(sim::Simulation, i; velocity_scale=0.0, scatterlines=nothing, grid=false)
 	time, positions, velocities = sim.times[i], sim.positions[:,i], sim.velocities[:,i]
 
     N = size(positions)[1]
-    title = @sprintf("State for N = %d at t = %.3f", N, time)
+    title = @sprintf("State for N = %d at t = %.3f", sim.nalive[i], time)
     p = plot(title=title, xlim=(-sim.width/2, +sim.width/2), ylim=(0, sim.height), size=(STATE_PLOT_SIZE, sim.height/sim.width*STATE_PLOT_SIZE), legend=nothing, xlabel="x", ylabel="y")
 	if scatterlines != nothing
 		hline!(p, scatterlines, color=:black, lw=2, alpha=0.25)
@@ -338,5 +341,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(200, 10, 0.2, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+sim = simulate(2000, 10, 0.2, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
 animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim.mp4")
