@@ -191,8 +191,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 			if !alive[n]
 				continue
 			end
-			pos = positions[n]
-			# TODO: delete earlier remembered position 
 			rempart(n)
 			addpart(n)
 		end
@@ -204,7 +202,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 			cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
 			for cx in cx1:cx2
 				for cy in cy1:cy2
-					#for (n2, _) in cell2part[cx,cy,1:celllen[cx,cy]]
 					for i in 1:celllen[cx,cy]
 						n2 = cell2part[cx,cy,i][1]
 						pos2, vel2 = positions[n2], velocities[n2]
@@ -254,8 +251,8 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 			end
 			if !alive[n]
 				pos = spawn_position(width, height, n, N, spawnymax)
+				vel = spawn_velocity(pos, v0, spawnvelang)
                 if position_is_available(pos, positions, sepdist)
-                    vel = spawn_velocity(pos, v0, spawnvelang)
 					spawn_particle(n, pos, vel)
                 end
             end
@@ -341,5 +338,5 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
 	return anim
 end
 
-sim = simulate(2000, 10, 0.2, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+sim = simulate(500, 10, 0.2, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
 animate_trajectories(sim, dt=0.1, fps=20, velocity_scale=0.00, path="anim.mp4")
