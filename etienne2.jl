@@ -222,17 +222,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 			end
 		end
                 
-		#=
-		for i in 1:N
-			pos1, vel1 = positions[i], velocities[i]
-			for j in i+1:N
-				pos2, vel2 = positions[j], velocities[j]
-				vel1, vel2 = scatter_particles(pos1, vel1, pos2, vel2, radius)
-				velocities[i] = vel1 # TODO: why on EARTH does it not work to do velocities[i], velocities[j] = scatter_particles()?
-				velocities[j] = vel2
-			end
-		end
-		=#
 		for i in 1:N
 			newpos = positions[i] .+ velocities[i] .* dt
 
