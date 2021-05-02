@@ -1,6 +1,7 @@
 using LinearAlgebra
 using Printf
 using Javis
+using ProgressMeter
 
 @Base.kwdef struct Parameters # allow construction with Parameters(N=...)
 	N::Int
@@ -117,12 +118,9 @@ function simulate(params)
 	cellwidth = params.width / ncellsx
 	cellheight = params.height / ncellsy
 
-	println("ncells: ($ncellsx, $ncellsy)")
-	println("radius: $(params.radius)")
-	println("cell size: ($cellwidth, $cellheight)")
-
 	max_parts_per_cell = Int(round(9 * cellwidth * cellheight / (pi*params.radius^2))) # assume complete filling
 
+	# TODO: use some form of map type?
 	# maps from cell -> particle and particle -> cell
 	celllen = Array{Int, 2}(undef, ncellsx, ncellsy)
 	cell2part = Array{Tuple{Int, Int}, 3}(undef, ncellsx, ncellsy, max_parts_per_cell) # (cx, cy, ci) -> (particle id, cell #1-4)
@@ -132,6 +130,9 @@ function simulate(params)
 			celllen[cx,cy] = 0
 		end
 	end
+
+	println("Number of cells:     ($ncellsx, $ncellsy)")
+	println("Max parts. per cell: $max_parts_per_cell")
 
 	function addpart(n)
 		pos = positions[n]
@@ -193,9 +194,9 @@ function simulate(params)
 		return true
 	end
     
-    for iter in 1:NT
+    @showprogress 1 "Simulating..." for iter in 1:NT
 		progress = Int(round(iter/NT * 100))
-		print("\rSimulating timestep $iter/$NT ($progress %) ...")
+		# print("\rSimulating timestep $iter/$NT ($progress %) ...")
 
 		# kill dead particles and (try to) respawn them
 		for n1 in 1:params.N
@@ -293,15 +294,12 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 end
 
 params = Parameters(
-	N = 500,
+	N = 10000,
 	T = 10.0,
-
 	width  = 30.0,
 	height = 15.0,
-
 	radius = 0.1,
 	spawn_separation = 0.2,
-
 	spawn_ymin = 0.0,
 	spawn_ymax = 2.0,
 	spawn_vmin = 2.0, 
@@ -309,7 +307,5 @@ params = Parameters(
 	spawn_angmin = -pi/6, 
 	spawn_angmax = +pi/6,
 )
-
 sim = simulate(params)
-
 animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
