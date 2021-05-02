@@ -2,6 +2,24 @@ using LinearAlgebra
 using Printf
 using Javis
 
+@Base.kwdef struct Parameters
+	N::Int
+	T::Float64
+
+	width::Float64
+	height::Float64
+
+	radius::Float64
+
+	spawn_separation::Float64
+	spawn_ymin::Float64
+	spawn_ymax::Float64
+	spawn_vmin::Float64
+	spawn_vmax::Float64
+	spawn_angmin::Float64
+	spawn_angmax::Float64
+end
+
 struct Simulation
 	N::Int64
 
@@ -92,41 +110,38 @@ function scatter_wall(pos, vel, radius)
 end
 
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
-function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawnvelang)
-    dt = 0.1 * radius / v0 # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
-    
-    println("v0 = ", v0)
-    println("dt = ", dt)
-    
-    times = 0:dt:t
-    NT = length(times)
+function simulate(params)
+	# TODO: print diagnostic information
 
-	sepdist = sepdistmult * radius
+    dt = 0.1 * params.radius / params.spawn_vmax # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     
-    positions, velocities = spawn_particles(N, width, height, radius)
+    times = 0:dt:params.T
+    NT = length(times)
     
-    positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
-    velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
+    positions, velocities = spawn_particles(params.N, params.width, params.height, params.radius)
+    
+    positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
+    velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
 	nalive_samples = Array{Int}(undef, NT)
 
 	nalive = 0
-	alive = fill(false, N)
+	alive = fill(false, params.N)
 
-	ncellsx = Int(floor(width / radius)-1) # floor & reduce, so at most 4 particles in each cell
-	ncellsy = Int(floor(height / radius)-1)
-	cellwidth = width / ncellsx
-	cellheight = height / ncellsy
+	ncellsx = Int(floor(params.width / params.radius)-1) # floor & reduce, so at most 4 particles in each cell
+	ncellsy = Int(floor(params.height / params.radius)-1)
+	cellwidth = params.width / ncellsx
+	cellheight = params.height / ncellsy
 
 	println("ncells: ($ncellsx, $ncellsy)")
-	println("radius: $radius")
+	println("radius: $(params.radius)")
 	println("cell size: ($cellwidth, $cellheight)")
 
-	max_parts_per_cell = Int(round(2 * 9 * cellwidth * cellheight / (pi*radius^2))) # assume complete filling
+	max_parts_per_cell = Int(round(2 * 9 * cellwidth * cellheight / (pi*params.radius^2))) # assume complete filling
 
 	# maps from cell -> particle and particle -> cell
 	celllen = Array{Int, 2}(undef, ncellsx, ncellsy)
 	cell2part = Array{Tuple{Int, Int}, 3}(undef, ncellsx, ncellsy, max_parts_per_cell) # (cx, cy, ci) -> (particle id, cell #1-4)
-	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
+	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, params.N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
 	for cx in 1:ncellsx
 		for cy in 1:ncellsy
 			celllen[cx,cy] = 0
@@ -135,7 +150,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 
 	function addpart(n)
 		pos = positions[n]
-		cx1, cy1, cx2, cy2 = pos2cells(pos, width, height, ncellsx, ncellsy)
+		cx1, cy1, cx2, cy2 = pos2cells(pos, params.width, params.height, ncellsx, ncellsy)
 		# println("$cx1 $cy1 $cx2 $cy2")
 		celllen[cx1,cy1] += 1
 		celllen[cx1,cy2] += 1
@@ -166,8 +181,8 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 		nalive -= 1
 	end
 
-	spawnerl = Spawner(-width/2, 0*height, 0.1*height, v0, v0, -spawnvelang/2, +spawnvelang/2)
-	spawnerr = Spawner(+width/2, 0*height, 0.1*height, v0, v0, -spawnvelang/2+pi, +spawnvelang/2+pi)
+	spawnerl = Spawner(-params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, 0  + params.spawn_angmin, 0  + params.spawn_angmax)
+	spawnerr = Spawner(+params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, pi + params.spawn_angmin, pi + params.spawn_angmax)
 
 	function spawn_particle(n, pos, vel)
 		alive[n] = true
@@ -178,13 +193,13 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 	end
 
 	function position_is_available(pos1)
-		cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
+		cx1, cy1, cx2, cy2 = pos2cells(pos1, params.width, params.height, ncellsx, ncellsy)
 		for cx in cx1:cx2 # TODO: create some form of cleaner iteration
 			for cy in cy1:cy2
 				for i in 1:celllen[cx,cy]
 					n2 = cell2part[cx,cy,i][1]
 					pos2 = positions[n2]
-					if norm(pos2 .- pos1) < sepdist
+					if norm(pos2 .- pos1) < params.spawn_separation
 						return false
 					end
 				end
@@ -198,8 +213,8 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 		print("\rSimulating timestep $iter/$NT ($progress %) ...")
 
 		# kill dead particles and (try to) respawn them
-		for n1 in 1:N
-            if alive[n1] && out_of_bounds(width, height, positions[n1])
+		for n1 in 1:params.N
+            if alive[n1] && out_of_bounds(params.width, params.height, positions[n1])
 				kill_particle(n1)
 			end
 			if !alive[n1]
@@ -222,14 +237,14 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 
 				# particle - particle interactions
 				pos1, vel1 = positions[n1], velocities[n1]
-				cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
+				cx1, cy1, cx2, cy2 = pos2cells(pos1, params.width, params.height, ncellsx, ncellsy)
 				for cx in cx1:cx2 # TODO: create some form of cleaner iteration
 					for cy in cy1:cy2
 						for i in 1:celllen[cx,cy]
 							n2 = cell2part[cx,cy,i][1]
 							pos2, vel2 = positions[n2], velocities[n2]
 							if alive[n2] && n2 > n1
-								vel1, vel2 = scatter_particles(pos1, vel1, pos2, vel2, radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
+								vel1, vel2 = scatter_particles(pos1, vel1, pos2, vel2, params.radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
 								velocities[n1], velocities[n2] = vel1, vel2
 							end
 						end
@@ -237,7 +252,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 				end
 
 				# particle - wall interactions
-				vel1 = scatter_wall(pos1, vel1, radius)
+				vel1 = scatter_wall(pos1, vel1, params.radius)
 				velocities[n1] = vel1
 			end
 		end
@@ -247,7 +262,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     end
     println() # end progress writer
     
-    return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, nalive_samples, ncellsx, ncellsy)
+    return Simulation(params.N, params.width, params.height, params.radius, times, positions_samples, velocities_samples, nalive_samples, ncellsx, ncellsy)
 end
 
 function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1)
@@ -292,5 +307,24 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	], pathname=path)
 end
 
-sim = simulate(50, 5, 0.5, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+params = Parameters(
+	N = 10,
+	T = 10.0,
+
+	width  = 30.0,
+	height = 15.0,
+
+	radius = 0.1,
+	spawn_separation = 0.2,
+
+	spawn_ymin = 0.0,
+	spawn_ymax = 2.0,
+	spawn_vmin = 2.0, 
+	spawn_vmax = 3.0,
+	spawn_angmin = -pi/6, 
+	spawn_angmax = +pi/6,
+)
+
+sim = simulate(params)
+
 animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
