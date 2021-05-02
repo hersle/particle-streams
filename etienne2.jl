@@ -43,10 +43,6 @@ function spawn_velocity(pos, v0, spawnvelang)
 	end
 end
 
-function position_is_available(pos, positions, sepdist)
-    return minimum(norm(p.-pos) for p in positions) > sepdist
-end
-
 function spawn_particles(N, width, height, sepdist)
     positions = Array{Tuple{Float64, Float64}}(undef, N)
     velocities = Array{Tuple{Float64, Float64}}(undef, N)
@@ -183,6 +179,22 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 
 		addpart(n) # add to cells
 	end
+
+	function position_is_available(pos1)
+		cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
+		for cx in cx1:cx2 # TODO: create some form of cleaner iteration
+			for cy in cy1:cy2
+				for i in 1:celllen[cx,cy]
+					n2 = cell2part[cx,cy,i][1]
+					pos2 = positions[n2]
+					if norm(pos2 .- pos1) < sepdist
+						return false
+					end
+				end
+			end
+		end
+		return true
+	end
     
     for iter in 2:NT # remaining NT - 1 iterations
         if iter % Int(round(NT / 40, digits=0)) == 0 || iter == NT
@@ -230,7 +242,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 			if !alive[n]
 				pos = spawn_position(width, height, n, N, spawnymax)
 				vel = spawn_velocity(pos, v0, spawnvelang)
-                if position_is_available(pos, positions, sepdist)
+                if position_is_available(pos)
 					spawn_particle(n, pos, vel)
                 end
             end
