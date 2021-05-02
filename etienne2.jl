@@ -123,14 +123,19 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 
 	ncellsx = Int(floor(width / radius)-1) # floor & reduce, so at most 4 particles in each cell
 	ncellsy = Int(floor(height / radius)-1)
+	cellwidth = width / ncellsx
+	cellheight = height / ncellsy
 
 	println("ncells: ($ncellsx, $ncellsy)")
 	println("radius: $radius")
-	println("cell size: ($(width/ncellsx), $(height/ncellsy))")
+	println("cell size: ($cellwidth, $cellheight)")
+
+	# TODO: fix this
+	max_parts_per_cell = Int(round(2 * 9 * cellwidth * cellheight / (pi*radius^2))) # assume complete filling
 
 	# maps from cell -> particle and particle -> cell
 	celllen = Array{Int, 2}(undef, ncellsx, ncellsy)
-	cell2part = Array{Tuple{Int, Int}, 3}(undef, ncellsx, ncellsy, N) # (cx, cy, ci) -> (particle id, cell #1-4)
+	cell2part = Array{Tuple{Int, Int}, 3}(undef, ncellsx, ncellsy, max_parts_per_cell) # (cx, cy, ci) -> (particle id, cell #1-4)
 	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
 	for cx in 1:ncellsx
 		for cy in 1:ncellsy
@@ -166,6 +171,8 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 	end
 
 	function kill_particle(n)
+		rempart(n)
+
 		alive[n] = false
 		nalive -= 1
 	end
@@ -197,16 +204,16 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 	end
     
     for iter in 2:NT # remaining NT - 1 iterations
-        if iter % Int(round(NT / 40, digits=0)) == 0 || iter == NT
-            print("\rSimulating $N particle(s) in $NT time steps: $(Int(round(iter/NT*100, digits=0))) %")
-        end
+		progress = Int(round(iter/NT * 100))
+		print("\rSimulating timestep $iter/$NT ($progress %) ...")
 
 		for n in 1:N
 			if alive[n]
-				rempart(n)
-				addpart(n)
+				rempart(n) # remove from current cell (based on prev pos)
+				addpart(n) # add to next cell (based on current pos)
 			end
 		end
+
 		for n1 in 1:N
 			if alive[n1]
 				pos1, vel1 = positions[n1], velocities[n1]
@@ -231,7 +238,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
                 
 		for i in 1:N
 			newpos = positions[i] .+ velocities[i] .* dt
-
 			positions[i] = newpos
 		end
 
@@ -343,6 +349,6 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	], pathname=path)
 end
 
-sim = simulate(5000, 10, 0.1, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+sim = simulate(1000, 50, 0.1, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
 # animate_trajectories(sim, dt=0.01, fps=20, velocity_scale=0.00, path="anim.mp4")
-animate_trajectories_javis(sim; fps=20, path="anim.mp4", frameskip=10)
+# animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=10)
