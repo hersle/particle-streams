@@ -18,9 +18,6 @@ struct Simulation
 	velocities::Array{Tuple{Float64, Float64}, 2}
 	nalive::Array{Int}
 
-	scatterlines::Array{Float64}
-	scatters::Array{Array{Tuple{Int64, Float64}}}
-
 	ncellsx::Int
 	ncellsy::Int
 end
@@ -118,9 +115,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     side = 1 # which side to spawn on
 	nalive = 0
 	alive = fill(false, N)
-
-	scatterlines = []
-	scatters = [[] for i in 1:length(scatterlines)]
     
     function sample(iter)
         positions_samples[:, iter] = positions
@@ -225,14 +219,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 		for i in 1:N
 			newpos = positions[i] .+ velocities[i] .* dt
 
-			# register scattering
-			for j in 1:length(scatterlines)
-				scatterliney = scatterlines[j]
-				if positions[i][2] < scatterliney && newpos[2] >= scatterliney
-					push!(scatters[j], (iter, newpos[1]))
-				end
-			end
-
 			positions[i] = newpos
 		end
 
@@ -252,18 +238,15 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     end
     println() # end progress writer
     
-    return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, nalive_samples, scatterlines, scatters, ncellsx, ncellsy)
+    return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, nalive_samples, ncellsx, ncellsy)
 end
 
-function plot_state(sim::Simulation, i; velocity_scale=0.0, scatterlines=nothing, grid=false)
+function plot_state(sim::Simulation, i; velocity_scale=0.0, grid=false)
 	time, positions, velocities = sim.times[i], sim.positions[:,i], sim.velocities[:,i]
 
     N = size(positions)[1]
     title = @sprintf("State for N = %d at t = %.3f", sim.nalive[i], time)
     p = plot(title=title, xlim=(-sim.width/2, +sim.width/2), ylim=(0, sim.height), size=(STATE_PLOT_SIZE, sim.height/sim.width*STATE_PLOT_SIZE), legend=nothing, xlabel="x", ylabel="y")
-	if scatterlines != nothing
-		hline!(p, scatterlines, color=:black, lw=2, alpha=0.25)
-	end
     scatter!(p, positions, color=:black, markersize=STATE_PLOT_SIZE * sim.radius/(sim.width))
     if velocity_scale != 0.0
         for n in 1:N
@@ -277,21 +260,8 @@ function plot_state(sim::Simulation, i; velocity_scale=0.0, scatterlines=nothing
     return p
 end
 
-function plot_scatters(sim::Simulation, scatters_so_far)
-	N = length(scatters_so_far)
-	p = plot(layout=(N, 1))
-	for i in 1:N
-		if length(scatters_so_far[i]) > 0
-			p = histogram!(p, scatters_so_far[i], xlim=(-sim.width/2, +sim.width/2), bins=range(-sim.width/2, stop=+sim.width/2, length=15), normalized=true, title="Scattering distribution", legend=nothing, subplot=i)
-		else
-			p = plot!(p)
-		end
-	end
-	return p
-end
-
 # TODO: use plotting library that shows correct radius
-function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histograms=false, dt=nothing, t=nothing, fps=30, path="anim.mp4")
+function animate_trajectories(sim::Simulation; velocity_scale=0.0, dt=nothing, t=nothing, fps=30, path="anim.mp4")
 	dt = dt == nothing ? sim.times[2]-sim.times[1] : dt
     t = t == nothing ? sim.times[end] : t
     f = Int(round(t / (sim.times[2] - sim.times[1]), digits=0))
@@ -302,25 +272,12 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, plot_histogra
     #times = times[:Int(round(t/dt, digits=0))]
 
     N, T = size(trajectories)
-    scatters_so_far = [[] for i in 1:length(sim.scatters)]
-	scatteri = [1 for i in 1:length(sim.scatters)]
     anim = @animate for t in 1:skip:T
         if true
             print("\rAnimating $N particle(s) in $(length(1:skip:T)) time steps: $(Int(round(t/T*100, digits=0))) %")
         end
 
-        p2 = plot_state(sim, t; velocity_scale=velocity_scale, scatterlines=sim.scatterlines, grid=false)
-
-		if plot_histograms
-			for j in 1:length(sim.scatters)
-				while scatteri[j] < length(sim.scatters[j]) && sim.scatters[j][scatteri[j]][1] <= t
-					push!(scatters_so_far[j], sim.scatters[j][scatteri[j]][2])
-					scatteri[j] += 1
-				end
-			end
-			p1 = plot_scatters(sim, scatters_so_far)
-			plot(p1, p2, layout=(2, 1), size=(STATE_PLOT_SIZE, STATE_PLOT_SIZE*2))
-		end
+        p2 = plot_state(sim, t; velocity_scale=velocity_scale, grid=false)
     end
     println()
     anim = mp4(anim, "anim.mp4", fps=fps)
