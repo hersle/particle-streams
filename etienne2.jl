@@ -21,11 +21,7 @@ using Javis
 end
 
 struct Simulation
-	N::Int64
-
-	width::Float64
-	height::Float64
-	radius::Float64
+	params::Parameters
 
 	times::AbstractArray
 	positions::Array{Tuple{Float64, Float64}, 2}
@@ -251,7 +247,7 @@ function simulate(params)
     end
     println() # end progress writer
     
-    return Simulation(params.N, params.width, params.height, params.radius, times, positions_samples, velocities_samples, nalive_samples, ncellsx, ncellsy)
+    return Simulation(params, times, positions_samples, velocities_samples, nalive_samples, ncellsx, ncellsy)
 end
 
 function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1)
@@ -264,15 +260,15 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	end
 
 	WIDTH = 1000
-	HEIGHT = sim.height / sim.width * WIDTH
+	HEIGHT = sim.params.height / sim.params.width * WIDTH
 
-	world2canvasr(r) = r / sim.width * WIDTH
-	world2canvasx(x) = -WIDTH/2 + WIDTH * (x - -sim.width/2) / sim.width
-	world2canvasy(y) = -HEIGHT/2 + HEIGHT * (sim.height - y) / sim.height
+	world2canvasr(r) = r / sim.params.width * WIDTH
+	world2canvasx(x) = -WIDTH/2 + WIDTH * (x - -sim.params.width/2) / sim.params.width
+	world2canvasy(y) = -HEIGHT/2 + HEIGHT * (sim.params.height - y) / sim.params.height
 	world2canvasxy(xy) = (world2canvasx(xy[1]), world2canvasy(xy[2]))
 
 	function object(pt, color)
-		circle(pt, world2canvasr(sim.radius), :fill)
+		circle(pt, world2canvasr(sim.params.radius), :fill)
 		return pt
 	end
 
@@ -284,7 +280,7 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 
 	function draw(video, action, frame)
 		return vcat(
-			[object(Point(world2canvasxy(sim.positions[n,frames[frame]])), "black") for n in 1:sim.N],
+			[object(Point(world2canvasxy(pos)), "black") for pos in sim.positions[:,frames[frame]]],
 			[textlabel("N = $(sim.nalive[frames[frame]])")],
 		)
 	end
