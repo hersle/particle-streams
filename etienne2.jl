@@ -323,14 +323,23 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 		return pt
 	end
 
-	function drawframe(video, action, frame)
-		return [object(Point(world2canvasxy(sim.positions[n,frames[frame]])), "black") for n in 1:sim.N]
+	function textlabel(str)
+		fontsize(20)
+		text(str, Point(-0.98*WIDTH/2, -0.98*HEIGHT/2); valign=:top)
+		return str
+	end
+
+	function draw(video, action, frame)
+		return vcat(
+			[object(Point(world2canvasxy(sim.positions[n,frames[frame]])), "black") for n in 1:sim.N],
+			[textlabel("N = $(sim.nalive[frames[frame]])")],
+		)
 	end
 
 	video = Video(WIDTH, HEIGHT)
 	javis(video, [
 		BackgroundAction(1:nf, ground), 
-		Action(1:nf, :red_ball, drawframe),
+		Action(1:nf, :red_ball, draw),
 	], pathname=path)
 end
 
