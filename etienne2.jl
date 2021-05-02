@@ -1,10 +1,11 @@
 using IJulia # avoids gr-related animation errors (https://github.com/JuliaPlots/Plots.jl/issues/3012)
 using LinearAlgebra
-using Plots
+# using Plots
 using Printf
-gr(dpi=100, fmt=:png);
+using Javis
+# gr(dpi=100, fmt=:png);
 
-STATE_PLOT_SIZE = 400
+# STATE_PLOT_SIZE = 400
 
 struct Simulation
 	N::Int64
@@ -241,6 +242,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, nalive_samples, ncellsx, ncellsy)
 end
 
+#=
 function plot_state(sim::Simulation, i; velocity_scale=0.0, grid=false)
 	time, positions, velocities = sim.times[i], sim.positions[:,i], sim.velocities[:,i]
 
@@ -285,6 +287,41 @@ function animate_trajectories(sim::Simulation; velocity_scale=0.0, dt=nothing, t
 	run(`mv anim_fixed.mp4 $path`)
 	return anim
 end
+=#
 
-sim = simulate(40, 10, 0.5, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
-animate_trajectories(sim, dt=0.01, fps=20, velocity_scale=0.00, path="anim.mp4")
+function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1)
+	frames = 1:frameskip:length(sim.times)
+	nf = length(frames)
+
+	function ground(args...)
+		background("white")
+		sethue("black")
+	end
+
+	WIDTH = 1000
+	HEIGHT = sim.height / sim.width * WIDTH
+
+	world2canvasr(r) = r / sim.width * WIDTH
+	world2canvasx(x) = -WIDTH/2 + WIDTH * (x - -sim.width/2) / sim.width
+	world2canvasy(y) = -HEIGHT/2 + HEIGHT * (sim.height - y) / sim.height
+	world2canvasxy(xy) = (world2canvasx(xy[1]), world2canvasy(xy[2]))
+
+	function object(pt, color)
+		circle(pt, world2canvasr(sim.radius), :fill)
+		return pt
+	end
+
+	function drawframe(video, action, frame)
+		return [object(Point(world2canvasxy(sim.positions[n,frames[frame]])), "black") for n in 1:sim.N]
+	end
+
+	video = Video(WIDTH, HEIGHT)
+	javis(video, [
+		BackgroundAction(1:nf, ground), 
+		Action(1:nf, :red_ball, drawframe),
+	], pathname=path)
+end
+
+sim = simulate(5000, 10, 0.1, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+# animate_trajectories(sim, dt=0.01, fps=20, velocity_scale=0.00, path="anim.mp4")
+animate_trajectories_javis(sim; fps=20, path="anim.mp4", frameskip=10)
