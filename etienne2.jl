@@ -18,24 +18,29 @@ struct Simulation
 	ncellsy::Int
 end
 
-function spawn_position(width, height, n, N, spawnymax)
-	# respawn
-	if mod(n, 2) == 0
-		x = -width/2
-	else
-		x = +width/2
-	end
-	y = rand() * spawnymax
-	return (x,y)
+struct Spawner
+	# position
+	x::Float64
+	ymin::Float64
+	ymax::Float64
+
+	# velocity
+	vmin::Float64
+	vmax::Float64
+	angmin::Float64
+	angmax::Float64
 end
 
-function spawn_velocity(pos, v0, spawnvelang)
-	ang = -spawnvelang/2 + spawnvelang * rand()
-	if pos[1] < 0
-		return (+v0*cos(ang), v0*sin(ang)) # spawn on left, move to right
-	else
-		return (-v0*cos(ang), v0*sin(ang)) # spawn on right, move to left
-	end
+function spawn(spawner::Spawner)
+	x = spawner.x
+	y = spawner.ymin + rand() * (spawner.ymax - spawner.ymin)
+	pos = (x, y)
+
+	v = spawner.vmin + rand() * (spawner.vmax - spawner.vmin)
+	ang = spawner.angmin + rand() * (spawner.angmax - spawner.angmin)
+	vel = (v * cos(ang), v * sin(ang))
+
+	return pos, vel
 end
 
 function spawn_particles(N, width, height, sepdist)
@@ -101,10 +106,10 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     positions, velocities = spawn_particles(N, width, height, radius)
     
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
+	println(size(positions_samples))
     velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
 	nalive_samples = Array{Int}(undef, NT)
 
-    side = 1 # which side to spawn on
 	nalive = 0
 	alive = fill(false, N)
     
@@ -167,18 +172,18 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 
 	function kill_particle(n)
 		rempart(n)
-
 		alive[n] = false
 		nalive -= 1
 	end
+
+	spawnerl = Spawner(-width/2, 0*height, 0.1*height, v0, 3*v0, -spawnvelang/2, +spawnvelang/2)
+	spawnerr = Spawner(+width/2, 0*height, 0.1*height, v0, v0, -spawnvelang/2+pi, +spawnvelang/2+pi)
 
 	function spawn_particle(n, pos, vel)
 		alive[n] = true
 		nalive += 1
 		positions[n] = pos
 		velocities[n] = vel
-		side = mod1(side + 1, 2) # spawn on other side next time
-
 		addpart(n) # add to cells
 	end
 
@@ -241,8 +246,11 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 				kill_particle(n)
 			end
 			if !alive[n]
-				pos = spawn_position(width, height, n, N, spawnymax)
-				vel = spawn_velocity(pos, v0, spawnvelang)
+				if n % 2 == 0
+					pos, vel = spawn(spawnerl)
+				else
+					pos, vel = spawn(spawnerr)
+				end
                 if position_is_available(pos)
 					spawn_particle(n, pos, vel)
                 end
@@ -297,5 +305,5 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	], pathname=path)
 end
 
-sim = simulate(5000, 50, 0.1, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+sim = simulate(50, 5, 0.1, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
 animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=10)
