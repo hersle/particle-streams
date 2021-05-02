@@ -118,8 +118,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
         velocities_samples[:, iter] = velocities
 		nalive_samples[iter] = nalive
     end
-    
-    sample(1)
 
 	ncellsx = Int(floor(width / radius)-1) # floor & reduce, so at most 4 particles in each cell
 	ncellsy = Int(floor(height / radius)-1)
@@ -130,7 +128,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 	println("radius: $radius")
 	println("cell size: ($cellwidth, $cellheight)")
 
-	# TODO: fix this
 	max_parts_per_cell = Int(round(2 * 9 * cellwidth * cellheight / (pi*radius^2))) # assume complete filling
 
 	# maps from cell -> particle and particle -> cell
@@ -229,10 +226,9 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 
 		# integrate particle positions (and update cell locations)
 		for n in 1:N
-			newpos = positions[n] .+ velocities[n] .* dt
-			positions[n] = newpos
-
 			if alive[n] # TODO: merge alive check with the above
+				newpos = positions[n] .+ velocities[n] .* dt
+				positions[n] = newpos
 				rempart(n) # remove from current cell (based on prev pos)
 				addpart(n) # add to next cell (based on current pos)
 			end
