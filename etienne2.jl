@@ -293,9 +293,12 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	], pathname=path)
 end
 
+# TODO: animate underway (i.e. do not store tons of positions)
+# TODO: output trajectories
+
 params = Parameters(
-	N = 10000,
-	T = 10.0,
+	N = 7500,
+	T = 100.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.1,
