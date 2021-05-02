@@ -106,18 +106,11 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     positions, velocities = spawn_particles(N, width, height, radius)
     
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
-	println(size(positions_samples))
     velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, N, NT)
 	nalive_samples = Array{Int}(undef, NT)
 
 	nalive = 0
 	alive = fill(false, N)
-    
-    function sample(iter)
-        positions_samples[:, iter] = positions
-        velocities_samples[:, iter] = velocities
-		nalive_samples[iter] = nalive
-    end
 
 	ncellsx = Int(floor(width / radius)-1) # floor & reduce, so at most 4 particles in each cell
 	ncellsy = Int(floor(height / radius)-1)
@@ -205,38 +198,28 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 		print("\rSimulating timestep $iter/$NT ($progress %) ...")
 
 		# kill dead particles and (try to) respawn them
-        for n in 1:N
-            if alive[n] && out_of_bounds(width, height, positions[n])
-				kill_particle(n)
+		for n1 in 1:N
+            if alive[n1] && out_of_bounds(width, height, positions[n1])
+				kill_particle(n1)
 			end
-			if !alive[n]
-				if n % 2 == 0
-					pos, vel = spawn(spawnerl)
-				else
-					pos, vel = spawn(spawnerr)
-				end
+			if !alive[n1]
+				pos, vel = spawn(n1 % 2 == 0 ? spawnerl : spawnerr)
                 if position_is_available(pos)
-					spawn_particle(n, pos, vel)
+					spawn_particle(n1, pos, vel)
                 end
             end
-        end
 
-		# sample positions and velocities
-        sample(iter)
+			# sample current positions and velocities
+			positions_samples[n1,iter] = positions[n1]
+			velocities_samples[n1,iter] = velocities[n1]
 
-		# integrate particle positions (and update cell locations)
-		for n in 1:N
-			if alive[n] # TODO: merge alive check with the above
-				newpos = positions[n] .+ velocities[n] .* dt
-				positions[n] = newpos
-				rempart(n) # remove from current cell (based on prev pos)
-				addpart(n) # add to next cell (based on current pos)
-			end
-		end
-
-		# do collisions
-		for n1 in 1:N
 			if alive[n1]
+				# integrate particle positions (and update cell locations)
+				newpos = positions[n1] .+ velocities[n1] .* dt
+				positions[n1] = newpos
+				rempart(n1) # remove from current cell (based on prev pos)
+				addpart(n1) # add to next cell (based on current pos)
+
 				# particle - particle interactions
 				pos1, vel1 = positions[n1], velocities[n1]
 				cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
@@ -258,6 +241,9 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 				velocities[n1] = vel1
 			end
 		end
+
+		# sample number of alive particles
+		nalive_samples[iter] = nalive
     end
     println() # end progress writer
     
