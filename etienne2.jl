@@ -61,16 +61,6 @@ function spawn(spawner::Spawner)
 	return pos, vel
 end
 
-function spawn_particles(N, width, height, sepdist)
-    positions = Array{Tuple{Float64, Float64}}(undef, N)
-    velocities = Array{Tuple{Float64, Float64}}(undef, N)
-    for n in 1:N
-        positions[n] = (-100*width, -(100+4*n*sepdist)) # surely outside, will respawn on death test
-        velocities[n] = (0, 0) # irrelevant, will respawn immediately anyway
-    end
-    return positions, velocities
-end
-
 function out_of_bounds(width, height, pos)
     x, y = pos[1], pos[2]
     return x < -width/2 || x > +width/2 || y > +height || y < -50
@@ -115,7 +105,8 @@ function simulate(params)
     times = 0:dt:params.T
     NT = length(times)
     
-    positions, velocities = spawn_particles(params.N, params.width, params.height, params.radius)
+    positions = Array{Tuple{Float64, Float64}}(undef, params.N)
+    velocities = Array{Tuple{Float64, Float64}}(undef, params.N)
     
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
     velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
@@ -325,4 +316,4 @@ params = Parameters(
 
 sim = simulate(params)
 
-# animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
+animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
