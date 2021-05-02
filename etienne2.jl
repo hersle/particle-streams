@@ -1,11 +1,6 @@
-using IJulia # avoids gr-related animation errors (https://github.com/JuliaPlots/Plots.jl/issues/3012)
 using LinearAlgebra
-# using Plots
 using Printf
 using Javis
-# gr(dpi=100, fmt=:png);
-
-# STATE_PLOT_SIZE = 400
 
 struct Simulation
 	N::Int64
@@ -260,53 +255,6 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
     return Simulation(N, width, height, radius, times, positions_samples, velocities_samples, nalive_samples, ncellsx, ncellsy)
 end
 
-#=
-function plot_state(sim::Simulation, i; velocity_scale=0.0, grid=false)
-	time, positions, velocities = sim.times[i], sim.positions[:,i], sim.velocities[:,i]
-
-    N = size(positions)[1]
-    title = @sprintf("State for N = %d at t = %.3f", sim.nalive[i], time)
-    p = plot(title=title, xlim=(-sim.width/2, +sim.width/2), ylim=(0, sim.height), size=(STATE_PLOT_SIZE, sim.height/sim.width*STATE_PLOT_SIZE), legend=nothing, xlabel="x", ylabel="y")
-    scatter!(p, positions, color=:black, markersize=STATE_PLOT_SIZE * sim.radius/(sim.width))
-    if velocity_scale != 0.0
-        for n in 1:N
-            pos, vel = positions[n], velocities[n]
-            plot!(p, [pos, pos .+ vel .* velocity_scale], arrow=:arrow, color=n)
-        end
-    end
-	if grid
-		p = plot!(p, xticks=range(-sim.width/2,+sim.width/2,length=sim.ncellsx+1), yticks=range(0,sim.height,length=sim.ncellsy+1), grid=true)
-	end
-    return p
-end
-
-# TODO: use plotting library that shows correct radius
-function animate_trajectories(sim::Simulation; velocity_scale=0.0, dt=nothing, t=nothing, fps=30, path="anim.mp4")
-	dt = dt == nothing ? sim.times[2]-sim.times[1] : dt
-    t = t == nothing ? sim.times[end] : t
-    f = Int(round(t / (sim.times[2] - sim.times[1]), digits=0))
-    skip = Int(round(dt / (sim.times[2] - sim.times[1]), digits=0))
-    println("skip:", skip)
-
-    trajectories = sim.positions[:,1:f] # respect upper time
-    #times = times[:Int(round(t/dt, digits=0))]
-
-    N, T = size(trajectories)
-    anim = @animate for t in 1:skip:T
-        if true
-            print("\rAnimating $N particle(s) in $(length(1:skip:T)) time steps: $(Int(round(t/T*100, digits=0))) %")
-        end
-
-        p2 = plot_state(sim, t; velocity_scale=velocity_scale, grid=false)
-    end
-    println()
-    anim = mp4(anim, "anim.mp4", fps=fps)
-	run(`ffmpeg -y -i anim.mp4 -vf "crop=trunc(iw/2)*2:trunc(ih/2)*2" -pix_fmt yuv420p anim_fixed.mp4`) # convert
-	run(`mv anim_fixed.mp4 $path`)
-	return anim
-end
-=#
-
 function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1)
 	frames = 1:frameskip:length(sim.times)
 	nf = length(frames)
@@ -349,6 +297,5 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	], pathname=path)
 end
 
-sim = simulate(1000, 50, 0.1, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
-# animate_trajectories(sim, dt=0.01, fps=20, velocity_scale=0.00, path="anim.mp4")
-# animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=10)
+sim = simulate(5000, 50, 0.1, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=10)
