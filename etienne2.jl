@@ -176,7 +176,7 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 		nalive -= 1
 	end
 
-	spawnerl = Spawner(-width/2, 0*height, 0.1*height, v0, 3*v0, -spawnvelang/2, +spawnvelang/2)
+	spawnerl = Spawner(-width/2, 0*height, 0.1*height, v0, v0, -spawnvelang/2, +spawnvelang/2)
 	spawnerr = Spawner(+width/2, 0*height, 0.1*height, v0, v0, -spawnvelang/2+pi, +spawnvelang/2+pi)
 
 	function spawn_particle(n, pos, vel)
@@ -203,44 +203,11 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
 		return true
 	end
     
-    for iter in 2:NT # remaining NT - 1 iterations
+    for iter in 1:NT
 		progress = Int(round(iter/NT * 100))
 		print("\rSimulating timestep $iter/$NT ($progress %) ...")
 
-		for n in 1:N
-			if alive[n]
-				rempart(n) # remove from current cell (based on prev pos)
-				addpart(n) # add to next cell (based on current pos)
-			end
-		end
-
-		for n1 in 1:N
-			if alive[n1]
-				pos1, vel1 = positions[n1], velocities[n1]
-				cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
-				for cx in cx1:cx2 # TODO: create some form of cleaner iteration
-					for cy in cy1:cy2
-						for i in 1:celllen[cx,cy]
-							n2 = cell2part[cx,cy,i][1]
-							pos2, vel2 = positions[n2], velocities[n2]
-							if alive[n2] && n2 > n1
-								vel1, vel2 = scatter_particles(pos1, vel1, pos2, vel2, radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
-								velocities[n1], velocities[n2] = vel1, vel2
-							end
-						end
-					end
-				end
-
-				vel1 = scatter_wall(pos1, vel1, radius)
-				velocities[n1] = vel1
-			end
-		end
-                
-		for i in 1:N
-			newpos = positions[i] .+ velocities[i] .* dt
-			positions[i] = newpos
-		end
-
+		# kill dead particles and (try to) respawn them
         for n in 1:N
             if alive[n] && out_of_bounds(width, height, positions[n])
 				kill_particle(n)
@@ -256,7 +223,45 @@ function simulate(N, t, radius, width, height, v0, sepdistmult, spawnymax, spawn
                 end
             end
         end
+
+		# sample positions and velocities
         sample(iter)
+
+		# integrate particle positions (and update cell locations)
+		for n in 1:N
+			newpos = positions[n] .+ velocities[n] .* dt
+			positions[n] = newpos
+
+			if alive[n] # TODO: merge alive check with the above
+				rempart(n) # remove from current cell (based on prev pos)
+				addpart(n) # add to next cell (based on current pos)
+			end
+		end
+
+		# do collisions
+		for n1 in 1:N
+			if alive[n1]
+				# particle - particle interactions
+				pos1, vel1 = positions[n1], velocities[n1]
+				cx1, cy1, cx2, cy2 = pos2cells(pos1, width, height, ncellsx, ncellsy)
+				for cx in cx1:cx2 # TODO: create some form of cleaner iteration
+					for cy in cy1:cy2
+						for i in 1:celllen[cx,cy]
+							n2 = cell2part[cx,cy,i][1]
+							pos2, vel2 = positions[n2], velocities[n2]
+							if alive[n2] && n2 > n1
+								vel1, vel2 = scatter_particles(pos1, vel1, pos2, vel2, radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
+								velocities[n1], velocities[n2] = vel1, vel2
+							end
+						end
+					end
+				end
+
+				# particle - wall interactions
+				vel1 = scatter_wall(pos1, vel1, radius)
+				velocities[n1] = vel1
+			end
+		end
     end
     println() # end progress writer
     
@@ -305,5 +310,5 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	], pathname=path)
 end
 
-sim = simulate(50, 5, 0.1, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
-animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=10)
+sim = simulate(50, 5, 0.5, 30.0, 15.0, 5.0, 2.1, 5, pi/6)
+animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
