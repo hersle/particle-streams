@@ -2,7 +2,7 @@ using LinearAlgebra
 using Printf
 using Javis
 
-@Base.kwdef struct Parameters
+@Base.kwdef struct Parameters # allow construction with Parameters(N=...)
 	N::Int
 	T::Float64
 
@@ -10,8 +10,8 @@ using Javis
 	height::Float64
 
 	radius::Float64
-
 	spawn_separation::Float64
+
 	spawn_ymin::Float64
 	spawn_ymax::Float64
 	spawn_vmin::Float64
@@ -111,10 +111,7 @@ end
 
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 function simulate(params)
-	# TODO: print diagnostic information
-
     dt = 0.1 * params.radius / params.spawn_vmax # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
-    
     times = 0:dt:params.T
     NT = length(times)
     
@@ -127,8 +124,9 @@ function simulate(params)
 	nalive = 0
 	alive = fill(false, params.N)
 
-	ncellsx = Int(floor(params.width / params.radius)-1) # floor & reduce, so at most 4 particles in each cell
-	ncellsy = Int(floor(params.height / params.radius)-1)
+	# aim for 1 particle in each cell, so one particle can be in at most 4 cells
+	ncellsx = Int(floor(params.width / (2*params.radius))-1) # floor & reduce, so at most 4 particles in each cell
+	ncellsy = Int(floor(params.height / (2*params.radius))-1)
 	cellwidth = params.width / ncellsx
 	cellheight = params.height / ncellsy
 
@@ -136,7 +134,7 @@ function simulate(params)
 	println("radius: $(params.radius)")
 	println("cell size: ($cellwidth, $cellheight)")
 
-	max_parts_per_cell = Int(round(2 * 9 * cellwidth * cellheight / (pi*params.radius^2))) # assume complete filling
+	max_parts_per_cell = Int(round(9 * cellwidth * cellheight / (pi*params.radius^2))) # assume complete filling
 
 	# maps from cell -> particle and particle -> cell
 	celllen = Array{Int, 2}(undef, ncellsx, ncellsy)
@@ -308,7 +306,7 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 end
 
 params = Parameters(
-	N = 10,
+	N = 500,
 	T = 10.0,
 
 	width  = 30.0,
@@ -327,4 +325,4 @@ params = Parameters(
 
 sim = simulate(params)
 
-animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
+# animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
