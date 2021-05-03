@@ -2,6 +2,7 @@ using LinearAlgebra
 using Printf
 using Javis
 using ProgressMeter
+using GR
 
 @Base.kwdef struct Parameters # allow construction with Parameters(N=...)
 	N::Int
@@ -28,6 +29,8 @@ struct Simulation
 	positions::Array{Tuple{Float64, Float64}, 2}
 	velocities::Array{Tuple{Float64, Float64}, 2}
 	alive::Array{Bool, 2}
+
+	trajectories::Array{Array{Tuple{Float64, Float64, Float64}}} # (time, x, y) for each particle life
 
 	ncellsx::Int
 	ncellsy::Int
@@ -158,6 +161,20 @@ function simulate(params)
 		alive[n] = false
 	end
 
+	part2id = Array{Int}(undef, params.N)
+	trajectories = Array{Array{Tuple{Float64, Float64, Float64}}}(undef, 0) # (time, x, y) for each particle life
+
+	# when spawning
+	function start_trajectory(n)
+		push!(trajectories, Array{Tuple{Float64, Float64, Float64}}(undef, 0))
+		part2id[n] = length(trajectories)
+	end
+
+	# when living
+	function log_trajectory(n, time, pos)
+		push!(trajectories[part2id[n]], (time, pos[1], pos[2]))
+	end
+
 	spawnerl = Spawner(-params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, 0  + params.spawn_angmin, 0  + params.spawn_angmax)
 	spawnerr = Spawner(+params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, pi + params.spawn_angmin, pi + params.spawn_angmax)
 
@@ -166,6 +183,7 @@ function simulate(params)
 		positions[n] = pos
 		velocities[n] = vel
 		addpart(n) # add to cells
+		start_trajectory(n)
 	end
 
 	function position_is_available(pos1)
@@ -201,6 +219,9 @@ function simulate(params)
 			positions_samples[n1,iter] = positions[n1]
 			velocities_samples[n1,iter] = velocities[n1]
 			alive_samples[n1,iter] = alive[n1]
+			if alive[n1]
+				log_trajectory(n1, times[iter], positions[n1])
+			end
 
 			if alive[n1]
 				# integrate particle positions (and update cell locations)
@@ -232,7 +253,7 @@ function simulate(params)
 		end
     end
     
-    return Simulation(params, times, positions_samples, velocities_samples, alive_samples, ncellsx, ncellsy)
+    return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
 
 function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1, interactive=false)
@@ -279,14 +300,23 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	], pathname=path, liveview=interactive)
 end
 
+function plot_trajectories(sim, which)
+	plot()
+	for trajectory in sim.trajectories[which]
+		x = [txy[2] for txy in trajectory]
+		y = [txy[3] for txy in trajectory]
+		oplot(x, y, ":*b")
+	end
+end
+
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 # TODO: animate underway (i.e. do not store tons of positions)
 # TODO: output trajectories
 # TODO: let user write own spawning functions?
 
 params = Parameters(
-	N = 100,
-	T = 30.0,
+	N = 50,
+	T = 10.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.1,
@@ -299,4 +329,4 @@ params = Parameters(
 	spawn_angmax = +pi/6,
 )
 sim = simulate(params)
-animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5, interactive=true)
+# animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5, interactive=true)
