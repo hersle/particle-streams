@@ -88,15 +88,18 @@ function scatter_particles(pos1, vel1, pos2, vel2, radius)
 	if r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
 		dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
 		vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
+		return vel1, vel2, true
+	else
+		return vel1, vel2, false
 	end
-	return vel1, vel2
 end
 
 function scatter_wall(pos, vel, radius)
 	if pos[2] < 0 && vel[2] < 0
-		return (vel[1], -vel[2]) # reflect y-velocity
+		return (vel[1], -vel[2]), true # reflect y-velocity
+	else
+		return vel, false
 	end
-	return vel
 end
 
 function simulate(params)
@@ -156,9 +159,10 @@ function simulate(params)
 		end
 	end
 
-	function kill_particle(n)
+	function kill_particle(n, iter)
 		rempart(n)
 		alive[n] = false
+		log_trajectory(n, iter)
 	end
 
 	part2id = Array{Int}(undef, params.N)
@@ -171,19 +175,20 @@ function simulate(params)
 	end
 
 	# when living
-	function log_trajectory(n, time, pos)
-		push!(trajectories[part2id[n]], (time, pos[1], pos[2]))
+	function log_trajectory(n, iter)
+		push!(trajectories[part2id[n]], (times[iter], positions[n][1], positions[n][2]))
 	end
 
 	spawnerl = Spawner(-params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, 0  + params.spawn_angmin, 0  + params.spawn_angmax)
 	spawnerr = Spawner(+params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, pi + params.spawn_angmin, pi + params.spawn_angmax)
 
-	function spawn_particle(n, pos, vel)
+	function spawn_particle(n, iter, pos, vel)
 		alive[n] = true
 		positions[n] = pos
 		velocities[n] = vel
 		addpart(n) # add to cells
 		start_trajectory(n)
+		log_trajectory(n, iter)
 	end
 
 	function position_is_available(pos1)
@@ -206,12 +211,12 @@ function simulate(params)
 		# kill dead particles and (try to) respawn them
 		for n1 in 1:params.N
             if alive[n1] && out_of_bounds(params.width, params.height, positions[n1])
-				kill_particle(n1)
+				kill_particle(n1, iter)
 			end
 			if !alive[n1]
 				pos, vel = spawn(n1 % 2 == 0 ? spawnerl : spawnerr)
                 if position_is_available(pos)
-					spawn_particle(n1, pos, vel)
+					spawn_particle(n1, iter, pos, vel)
                 end
             end
 
@@ -219,9 +224,6 @@ function simulate(params)
 			positions_samples[n1,iter] = positions[n1]
 			velocities_samples[n1,iter] = velocities[n1]
 			alive_samples[n1,iter] = alive[n1]
-			if alive[n1]
-				log_trajectory(n1, times[iter], positions[n1])
-			end
 
 			if alive[n1]
 				# integrate particle positions (and update cell locations)
@@ -229,6 +231,8 @@ function simulate(params)
 				positions[n1] = newpos
 				rempart(n1) # remove from current cell (based on prev pos)
 				addpart(n1) # add to next cell (based on current pos)
+
+				has_scattered = false
 
 				# particle - particle interactions
 				pos1, vel1 = positions[n1], velocities[n1]
@@ -239,16 +243,22 @@ function simulate(params)
 							n2 = cell2part[cx,cy,i][1]
 							pos2, vel2 = positions[n2], velocities[n2]
 							if alive[n2] && n2 > n1
-								vel1, vel2 = scatter_particles(pos1, vel1, pos2, vel2, params.radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
+								vel1, vel2, scattered = scatter_particles(pos1, vel1, pos2, vel2, params.radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
 								velocities[n1], velocities[n2] = vel1, vel2
+								has_scattered = has_scattered || scattered
 							end
 						end
 					end
 				end
 
 				# particle - wall interactions
-				vel1 = scatter_wall(pos1, vel1, params.radius)
+				vel1, scattered = scatter_wall(pos1, vel1, params.radius)
 				velocities[n1] = vel1
+				has_scattered = has_scattered || scattered
+
+				if has_scattered
+					log_trajectory(n1, iter) # log trajectory only when scattering
+				end
 			end
 		end
     end
@@ -302,11 +312,16 @@ end
 
 function plot_trajectories(sim, which)
 	plot()
+	setmarkersize(1.0)
 	for trajectory in sim.trajectories[which]
 		x = [txy[2] for txy in trajectory]
 		y = [txy[3] for txy in trajectory]
-		oplot(x, y, ":*b")
+		oplot(x, y, "-*o")
 	end
+	oplot(
+		size=(800*sim.params.width/sim.params.height, 800),
+		xlim=(-sim.params.width/2, +sim.params.width/2), ylim=(0, sim.params.height),
+	)
 end
 
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
@@ -315,8 +330,8 @@ end
 # TODO: let user write own spawning functions?
 
 params = Parameters(
-	N = 50,
-	T = 10.0,
+	N = 200,
+	T = 20.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.1,
