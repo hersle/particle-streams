@@ -27,7 +27,7 @@ struct Simulation
 	times::AbstractArray
 	positions::Array{Tuple{Float64, Float64}, 2}
 	velocities::Array{Tuple{Float64, Float64}, 2}
-	nalive::Array{Int}
+	alive::Array{Bool, 2}
 
 	ncellsx::Int
 	ncellsy::Int
@@ -104,13 +104,11 @@ function simulate(params)
     
     positions = Array{Tuple{Float64, Float64}}(undef, params.N)
     velocities = Array{Tuple{Float64, Float64}}(undef, params.N)
+	alive = fill(false, params.N)
     
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
     velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
-	nalive_samples = Array{Int}(undef, NT)
-
-	nalive = 0
-	alive = fill(false, params.N)
+    alive_samples = Array{Bool, 2}(undef, params.N, NT)
 
 	# aim for 1 particle in each cell, so one particle can be in at most 4 cells
 	ncellsx = Int(floor(params.width / (2*params.radius))-1) # floor & reduce, so at most 4 particles in each cell
@@ -164,7 +162,6 @@ function simulate(params)
 	function kill_particle(n)
 		rempart(n)
 		alive[n] = false
-		nalive -= 1
 	end
 
 	spawnerl = Spawner(-params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, 0  + params.spawn_angmin, 0  + params.spawn_angmax)
@@ -172,7 +169,6 @@ function simulate(params)
 
 	function spawn_particle(n, pos, vel)
 		alive[n] = true
-		nalive += 1
 		positions[n] = pos
 		velocities[n] = vel
 		addpart(n) # add to cells
@@ -213,6 +209,7 @@ function simulate(params)
 			# sample current positions and velocities
 			positions_samples[n1,iter] = positions[n1]
 			velocities_samples[n1,iter] = velocities[n1]
+			alive_samples[n1,iter] = alive[n1]
 
 			if alive[n1]
 				# integrate particle positions (and update cell locations)
@@ -242,13 +239,10 @@ function simulate(params)
 				velocities[n1] = vel1
 			end
 		end
-
-		# sample number of alive particles
-		nalive_samples[iter] = nalive
     end
     println() # end progress writer
     
-    return Simulation(params, times, positions_samples, velocities_samples, nalive_samples, ncellsx, ncellsy)
+    return Simulation(params, times, positions_samples, velocities_samples, alive_samples, ncellsx, ncellsy)
 end
 
 function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1)
@@ -280,9 +274,10 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	end
 
 	function draw(video, action, frame)
+		nalive = sum(sim.alive[:,frames[frame]])
 		return vcat(
 			[object(Point(world2canvasxy(pos)), "black") for pos in sim.positions[:,frames[frame]]],
-			[textlabel("N = $(sim.nalive[frames[frame]])")],
+			[textlabel("N = $nalive")],
 		)
 	end
 
