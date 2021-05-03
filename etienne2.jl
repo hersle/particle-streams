@@ -275,8 +275,9 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 
 	function draw(video, action, frame)
 		nalive = sum(sim.alive[:,frames[frame]])
+		alive_particles = Iterators.filter(n -> sim.alive[n,frames[frame]], 1:sim.params.N)
 		return vcat(
-			[object(Point(world2canvasxy(pos)), "black") for pos in sim.positions[:,frames[frame]]],
+			[object(Point(world2canvasxy(sim.positions[n,frames[frame]])), "black") for n in alive_particles],
 			[textlabel("N = $nalive")],
 		)
 	end
@@ -292,7 +293,7 @@ end
 # TODO: output trajectories
 
 params = Parameters(
-	N = 5000,
+	N = 100,
 	T = 30.0,
 	width  = 30.0,
 	height = 15.0,
