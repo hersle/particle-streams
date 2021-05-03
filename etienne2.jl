@@ -96,7 +96,6 @@ function scatter_wall(pos, vel, radius)
 	return vel
 end
 
-# TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 function simulate(params)
     dt = 0.1 * params.radius / params.spawn_vmax # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     times = 0:dt:params.T
@@ -116,18 +115,13 @@ function simulate(params)
 	cellwidth = params.width / ncellsx
 	cellheight = params.height / ncellsy
 
-	max_parts_per_cell = Int(round(9 * cellwidth * cellheight / (pi*params.radius^2))) # assume complete filling
+	max_parts_per_cell = Int(round(9*cellwidth*cellheight / (pi*params.radius^2))) # assume complete filling for simple upper bound
 
 	# TODO: use some form of map type?
 	# maps from cell -> particle and particle -> cell
-	celllen = Array{Int, 2}(undef, ncellsx, ncellsy)
+	celllen = zeros(Int, (ncellsx, ncellsy))
 	cell2part = Array{Tuple{Int, Int}, 3}(undef, ncellsx, ncellsy, max_parts_per_cell) # (cx, cy, ci) -> (particle id, cell #1-4)
 	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, params.N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
-	for cx in 1:ncellsx
-		for cy in 1:ncellsy
-			celllen[cx,cy] = 0
-		end
-	end
 
 	println("Number of cells:     ($ncellsx, $ncellsy)")
 	println("Max parts. per cell: $max_parts_per_cell")
@@ -191,9 +185,6 @@ function simulate(params)
 	end
     
     @showprogress 1 "Simulating..." for iter in 1:NT
-		progress = Int(round(iter/NT * 100))
-		# print("\rSimulating timestep $iter/$NT ($progress %) ...")
-
 		# kill dead particles and (try to) respawn them
 		for n1 in 1:params.N
             if alive[n1] && out_of_bounds(params.width, params.height, positions[n1])
@@ -240,7 +231,6 @@ function simulate(params)
 			end
 		end
     end
-    println() # end progress writer
     
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, ncellsx, ncellsy)
 end
@@ -289,8 +279,10 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	], pathname=path, liveview=interactive)
 end
 
+# TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 # TODO: animate underway (i.e. do not store tons of positions)
 # TODO: output trajectories
+# TODO: let user write own spawning functions?
 
 params = Parameters(
 	N = 100,
