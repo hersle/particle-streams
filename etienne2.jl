@@ -245,7 +245,7 @@ function simulate(params)
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, ncellsx, ncellsy)
 end
 
-function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1)
+function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1, interactive=false)
 	frames = 1:frameskip:length(sim.times)
 	nf = length(frames)
 
@@ -285,15 +285,15 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 	javis(video, [
 		BackgroundAction(1:nf, ground), 
 		Action(1:nf, :red_ball, draw),
-	], pathname=path)
+	], pathname=path, liveview=interactive)
 end
 
 # TODO: animate underway (i.e. do not store tons of positions)
 # TODO: output trajectories
 
 params = Parameters(
-	N = 7500,
-	T = 100.0,
+	N = 5000,
+	T = 30.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.1,
@@ -306,4 +306,4 @@ params = Parameters(
 	spawn_angmax = +pi/6,
 )
 sim = simulate(params)
-animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
+animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5, interactive=true)
