@@ -290,7 +290,7 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 
 	function textlabel(str)
 		fontsize(20)
-		text(str, Point(-0.98*WIDTH/2, -0.98*HEIGHT/2); valign=:top)
+		Javis.text(str, Point(-0.98*WIDTH/2, -0.98*HEIGHT/2); valign=:top)
 		return str
 	end
 
@@ -330,18 +330,18 @@ end
 # TODO: let user write own spawning functions?
 
 params = Parameters(
-	N = 200,
-	T = 20.0,
+	N = 8000,
+	T = 30.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.1,
 	spawn_separation = 0.2,
 	spawn_ymin = 0.0,
-	spawn_ymax = 2.0,
+	spawn_ymax = 9.0,
 	spawn_vmin = 2.0, 
 	spawn_vmax = 3.0,
 	spawn_angmin = -pi/6, 
 	spawn_angmax = +pi/6,
 )
 sim = simulate(params)
-# animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5, interactive=true)
+animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5, interactive=true)
