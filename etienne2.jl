@@ -1,8 +1,13 @@
 using LinearAlgebra
 using Printf
-using Javis
+#using Javis
 using ProgressMeter
-using GR
+#using GR
+#using GRUtils
+using GLMakie
+#using AbstractPlotting.Colors
+
+GLMakie.AbstractPlotting.inline!(true)
 
 @Base.kwdef struct Parameters # allow construction with Parameters(N=...)
 	N::Int
@@ -266,6 +271,43 @@ function simulate(params)
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
 
+function animate_trajectories_makie(sim::Simulation; fps=30, path="anim.mp4", frameskip=1)
+	frames = 1:frameskip:length(sim.times)
+	nf = length(frames)
+
+	figure = Figure(resolution=(800*sim.params.width/sim.params.height, 800))
+	axis = Axis(figure[1,1])
+	xlims!(axis, -sim.params.width/2, +sim.params.width/2)
+	ylims!(axis, 0, +sim.params.height)
+
+	positions = Node(sim.positions[:,1])
+	scatter!(axis, positions, markersize=2*800*sim.params.radius/sim.params.height, color=:black)
+	
+	record(figure, "testanim.mkv", framerate=fps) do io
+		for f in 1:nf
+			print("\rAnimating frame $f / $nf ...")
+			positions[] = sim.positions[:,frames[f]]
+			recordframe!(io)
+		end
+	end
+
+	return figure
+
+	scene = Scene(resolution=(800, 800))
+	positions = Node(sim.positions[:,1])
+	# limits!(scene, -sim.params.width/2, +sim.params.width/2, 0, sim.params.height)
+	scatter!(scene, positions, limits=FRect2D(0, 0, 2, 2))
+	println(s.plots)
+	# update_limits!(scene, FRect(-sim.params.width/2, +sim.params.width/2, 0, sim.params.height))
+	println("hello")
+	record(scene, "testanim.mkv") do io
+		for t in 1:length(sim.times)
+			positions[] = sim.positions[:,t]
+			recordframe!(io)
+		end
+	end
+end
+
 function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1, interactive=false)
 	frames = 1:frameskip:length(sim.times)
 	nf = length(frames)
@@ -344,4 +386,5 @@ params = Parameters(
 	spawn_angmax = +pi/6,
 )
 sim = simulate(params)
-animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5, interactive=true)
+#animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
+animate_trajectories_makie(sim; fps=30, path="anim.mp4", frameskip=10)
