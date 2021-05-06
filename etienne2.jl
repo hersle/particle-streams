@@ -345,6 +345,8 @@ function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", fr
 		)
 	end
 
+	# doc: https://juliahub.com/docs/Javis/NRkHq/0.3.3/
+
 	video = Video(WIDTH, HEIGHT)
 	javis(video, [
 		BackgroundAction(1:nf, ground), 
