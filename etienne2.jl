@@ -1,13 +1,8 @@
 using LinearAlgebra
 using Printf
-#using Javis
 using ProgressMeter
-#using GR
-#using GRUtils
 using GLMakie
-#using AbstractPlotting.Colors
-
-GLMakie.AbstractPlotting.inline!(true)
+GLMakie.AbstractPlotting.inline!(true) # do not show window while animating
 
 @Base.kwdef struct Parameters # allow construction with Parameters(N=...)
 	N::Int
@@ -271,87 +266,26 @@ function simulate(params)
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
 
-function animate_trajectories_makie(sim::Simulation; fps=30, path="anim.mp4", frameskip=1)
+function animate_trajectories(sim::Simulation; fps=30, path="anim.mkv", frameskip=1)
 	frames = 1:frameskip:length(sim.times)
 	nf = length(frames)
 
-	figure = Figure(resolution=(800*sim.params.width/sim.params.height, 800))
+	figure = Figure(resolution=(400*sim.params.width/sim.params.height, 400), title="abc")
 	axis = Axis(figure[1,1])
 	xlims!(axis, -sim.params.width/2, +sim.params.width/2)
 	ylims!(axis, 0, +sim.params.height)
 
 	positions = Node(sim.positions[:,1])
-	scatter!(axis, positions, markersize=2*800*sim.params.radius/sim.params.height, color=:black)
+	scatter!(axis, positions, markersize=2*400*sim.params.radius/sim.params.height, color=:black)
 	
-	record(figure, "testanim.mkv", framerate=fps) do io
+	record(figure, path, framerate=fps) do io
 		for f in 1:nf
 			print("\rAnimating frame $f / $nf ...")
 			positions[] = sim.positions[:,frames[f]]
 			recordframe!(io)
 		end
 	end
-
 	return figure
-
-	scene = Scene(resolution=(800, 800))
-	positions = Node(sim.positions[:,1])
-	# limits!(scene, -sim.params.width/2, +sim.params.width/2, 0, sim.params.height)
-	scatter!(scene, positions, limits=FRect2D(0, 0, 2, 2))
-	println(s.plots)
-	# update_limits!(scene, FRect(-sim.params.width/2, +sim.params.width/2, 0, sim.params.height))
-	println("hello")
-	record(scene, "testanim.mkv") do io
-		for t in 1:length(sim.times)
-			positions[] = sim.positions[:,t]
-			recordframe!(io)
-		end
-	end
-end
-
-function animate_trajectories_javis(sim::Simulation; fps=30, path="anim.mp4", frameskip=1, interactive=false)
-	frames = 1:frameskip:length(sim.times)
-	nf = length(frames)
-
-	function ground(args...)
-		background("white")
-		sethue("black")
-	end
-
-	WIDTH = 1000
-	HEIGHT = sim.params.height / sim.params.width * WIDTH
-
-	world2canvasr(r) = r / sim.params.width * WIDTH
-	world2canvasx(x) = -WIDTH/2 + WIDTH * (x - -sim.params.width/2) / sim.params.width
-	world2canvasy(y) = -HEIGHT/2 + HEIGHT * (sim.params.height - y) / sim.params.height
-	world2canvasxy(xy) = (world2canvasx(xy[1]), world2canvasy(xy[2]))
-
-	function object(pt, color)
-		circle(pt, world2canvasr(sim.params.radius), :fill)
-		return pt
-	end
-
-	function textlabel(str)
-		fontsize(20)
-		Javis.text(str, Point(-0.98*WIDTH/2, -0.98*HEIGHT/2); valign=:top)
-		return str
-	end
-
-	function draw(video, action, frame)
-		nalive = sum(sim.alive[:,frames[frame]])
-		alive_particles = Iterators.filter(n -> sim.alive[n,frames[frame]], 1:sim.params.N)
-		return vcat(
-			[object(Point(world2canvasxy(sim.positions[n,frames[frame]])), "black") for n in alive_particles],
-			[textlabel("N = $nalive")],
-		)
-	end
-
-	# doc: https://juliahub.com/docs/Javis/NRkHq/0.3.3/
-
-	video = Video(WIDTH, HEIGHT)
-	javis(video, [
-		BackgroundAction(1:nf, ground), 
-		Action(1:nf, :red_ball, draw),
-	], pathname=path, liveview=interactive)
 end
 
 function plot_trajectories(sim, which)
@@ -374,8 +308,8 @@ end
 # TODO: let user write own spawning functions?
 
 params = Parameters(
-	N = 8000,
-	T = 30.0,
+	N = 2000,
+	T = 50.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.1,
@@ -388,5 +322,4 @@ params = Parameters(
 	spawn_angmax = +pi/6,
 )
 sim = simulate(params)
-#animate_trajectories_javis(sim; fps=30, path="anim.mp4", frameskip=5)
-animate_trajectories_makie(sim; fps=30, path="anim.mp4", frameskip=10)
+animate_trajectories(sim; fps=30, path="anim.mkv", frameskip=10)
