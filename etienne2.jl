@@ -107,8 +107,9 @@ function simulate(params)
     times = 0:dt:params.T
     NT = length(times)
     
-    positions = Array{Tuple{Float64, Float64}}(undef, params.N)
-    velocities = Array{Tuple{Float64, Float64}}(undef, params.N)
+	outsidepos = (-sim.params.width/2 - 10 * sim.params.radius, - 10 * sim.params.radius)
+    positions = fill(outsidepos, params.N)
+    velocities = fill((0.0, 0.0), params.N)
 	alive = fill(false, params.N)
     
     positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
@@ -121,7 +122,7 @@ function simulate(params)
 	cellwidth = params.width / ncellsx
 	cellheight = params.height / ncellsy
 
-	max_parts_per_cell = Int(round(9*cellwidth*cellheight / (pi*params.radius^2))) # assume complete filling for simple upper bound
+	max_parts_per_cell = 16 * Int(round(9*cellwidth*cellheight / (pi*params.radius^2))) # assume complete filling for simple upper bound
 
 	# TODO: use some form of map type?
 	# maps from cell -> particle and particle -> cell
@@ -163,6 +164,7 @@ function simulate(params)
 		rempart(n)
 		alive[n] = false
 		log_trajectory(n, iter)
+		positions[n] = (-1000 * sim.params.width/2, -1000) # move outside area (just to remove from plot)
 	end
 
 	part2id = Array{Int}(undef, params.N)
@@ -270,6 +272,8 @@ function simulate(params)
 end
 
 function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
+	# TODO: force clear, new figure or something?
+
 	frames = 1:frameskip:length(sim.times)
 	nf = length(frames)
 
@@ -279,7 +283,7 @@ function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
 	ylims!(axis, 0, +sim.params.height)
 
 	positions = Node(sim.positions[:,1])
-	scatter!(axis, positions, markersize=2*400*sim.params.radius/sim.params.height, color=:black)
+	scatter!(axis, positions, markersize=2*sim.params.radius, markerspace=AbstractPlotting.SceneSpace, color=:red)
 
 	fps = Int(round(nf / (sim.times[end] - sim.times[1]))) # make duration equal to simulation time in seconds
 	record(figure, path, framerate=fps) do io
@@ -323,10 +327,10 @@ params = Parameters(
 	T = 20.0,
 	width  = 30.0,
 	height = 15.0,
-	radius = 0.1,
-	spawn_separation = 0.2,
+	radius = 0.2,
+	spawn_separation = 0.5,
 	spawn_ymin = 0.0,
-	spawn_ymax = 9.0,
+	spawn_ymax = 6.0,
 	spawn_vmin = 2.0, 
 	spawn_vmax = 3.0,
 	spawn_angmin = -pi/6, 
