@@ -207,8 +207,10 @@ function simulate(params)
 		return true
 	end
     
-    @showprogress 1 "Simulating..." for iter in 1:NT
+    for iter in 1:NT
 		# kill dead particles and (try to) respawn them
+		print("\rSimulating time step $iter / $NT ...")
+
 		for n1 in 1:params.N
             if alive[n1] && out_of_bounds(params.width, params.height, positions[n1])
 				kill_particle(n1, iter)
@@ -262,6 +264,7 @@ function simulate(params)
 			end
 		end
     end
+	println() # finish progress printing
     
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
@@ -270,7 +273,7 @@ function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
 	frames = 1:frameskip:length(sim.times)
 	nf = length(frames)
 
-	figure = Figure(resolution=(400*sim.params.width/sim.params.height, 400), title="abc")
+	figure = Figure(resolution=(400*sim.params.width/sim.params.height, 400))
 	axis = Axis(figure[1,1], xlabel="x", ylabel="y")
 	xlims!(axis, -sim.params.width/2, +sim.params.width/2)
 	ylims!(axis, 0, +sim.params.height)
@@ -292,6 +295,7 @@ function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
 			recordframe!(io)
 		end
 	end
+	println() # finish progress printing
 	return figure
 end
 
