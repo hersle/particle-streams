@@ -266,7 +266,7 @@ function simulate(params)
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
 
-function animate_trajectories(sim::Simulation; fps=30, path="anim.mkv", frameskip=1)
+function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
 	frames = 1:frameskip:length(sim.times)
 	nf = length(frames)
 
@@ -277,11 +277,18 @@ function animate_trajectories(sim::Simulation; fps=30, path="anim.mkv", frameski
 
 	positions = Node(sim.positions[:,1])
 	scatter!(axis, positions, markersize=2*400*sim.params.radius/sim.params.height, color=:black)
-	
+
+	fps = Int(round(nf / (sim.times[end] - sim.times[1]))) # make duration equal to simulation time in seconds
 	record(figure, path, framerate=fps) do io
 		for f in 1:nf
 			print("\rAnimating frame $f / $nf ...")
 			positions[] = sim.positions[:,frames[f]]
+
+			nalive = sum(sim.alive[:,frames[f]])
+			t2 = round(sim.times[end], digits=1)
+			t = round(sim.times[frames[f]], digits=1)
+			axis.title = "N = $nalive, t = $t / $t2"
+
 			recordframe!(io)
 		end
 	end
@@ -308,8 +315,8 @@ end
 # TODO: let user write own spawning functions?
 
 params = Parameters(
-	N = 100,
-	T = 10.0,
+	N = 5000,
+	T = 20.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.1,
@@ -322,4 +329,4 @@ params = Parameters(
 	spawn_angmax = +pi/6,
 )
 sim = simulate(params)
-animate_trajectories(sim; fps=30, path="anim.mkv", frameskip=10)
+animate_trajectories(sim; path="anim.mkv", frameskip=5)
