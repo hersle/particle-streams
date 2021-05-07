@@ -271,7 +271,7 @@ function animate_trajectories(sim::Simulation; fps=30, path="anim.mkv", frameski
 	nf = length(frames)
 
 	figure = Figure(resolution=(400*sim.params.width/sim.params.height, 400), title="abc")
-	axis = Axis(figure[1,1])
+	axis = Axis(figure[1,1], xlabel="x", ylabel="y")
 	xlims!(axis, -sim.params.width/2, +sim.params.width/2)
 	ylims!(axis, 0, +sim.params.height)
 
@@ -308,8 +308,8 @@ end
 # TODO: let user write own spawning functions?
 
 params = Parameters(
-	N = 2000,
-	T = 50.0,
+	N = 100,
+	T = 10.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.1,
