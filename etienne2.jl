@@ -107,7 +107,7 @@ function simulate(params)
     times = 0:dt:params.T
     NT = length(times)
     
-	outsidepos = (-sim.params.width/2 - 10 * sim.params.radius, - 10 * sim.params.radius)
+	outsidepos = (-params.width/2 - 10 * params.radius, - 10 * params.radius)
     positions = fill(outsidepos, params.N)
     velocities = fill((0.0, 0.0), params.N)
 	alive = fill(false, params.N)
@@ -164,7 +164,7 @@ function simulate(params)
 		rempart(n)
 		alive[n] = false
 		log_trajectory(n, iter)
-		positions[n] = (-1000 * sim.params.width/2, -1000) # move outside area (just to remove from plot)
+		positions[n] = (-1000 * params.width/2, -1000) # move outside area (just to remove from plot)
 	end
 
 	part2id = Array{Int}(undef, params.N)
@@ -277,8 +277,15 @@ function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
 	frames = 1:frameskip:length(sim.times)
 	nf = length(frames)
 
-	figure = Figure(resolution=(400*sim.params.width/sim.params.height, 400))
-	axis = Axis(figure[1,1], xlabel="x", ylabel="y")
+	figure = Figure(resolution=(600*sim.params.width/sim.params.height, 600))
+	axis = Axis(figure[1,1], 
+		xlabel="W = $(sim.params.width)",   xminorticks=IntervalsBetween(sim.ncellsx), xminorgridvisible=true,
+		ylabel="H = $(sim.params.height)", yminorticks=IntervalsBetween(sim.ncellsy), yminorgridvisible=true,
+	)
+	axis.xticks = [-sim.params.width/2, +sim.params.width/2]
+	axis.yticks = [0, +sim.params.height]
+	hidexdecorations!(axis, label=false, minorgrid=false)
+	hideydecorations!(axis, label=false, minorgrid=false)
 	xlims!(axis, -sim.params.width/2, +sim.params.width/2)
 	ylims!(axis, 0, +sim.params.height)
 
@@ -294,7 +301,9 @@ function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
 			nalive = sum(sim.alive[:,frames[f]])
 			t2 = round(sim.times[end], digits=1)
 			t = round(sim.times[frames[f]], digits=1)
-			axis.title = "N = $nalive, t = $t / $t2"
+			R = sim.params.radius
+			S = sim.params.spawn_separation
+			axis.title = "N = $nalive        t = $t / $t2        R = $R        S = $S"
 
 			recordframe!(io)
 		end
@@ -321,14 +330,15 @@ end
 # TODO: animate underway (i.e. do not store tons of positions)
 # TODO: output trajectories
 # TODO: let user write own spawning functions?
+# TODO: animate only part of a simulation
 
 params = Parameters(
-	N = 5000,
-	T = 20.0,
+	N = 800,
+	T = 1.0,
 	width  = 30.0,
 	height = 15.0,
-	radius = 0.2,
-	spawn_separation = 0.5,
+	radius = 0.1,
+	spawn_separation = 0.2,
 	spawn_ymin = 0.0,
 	spawn_ymax = 6.0,
 	spawn_vmin = 2.0, 
