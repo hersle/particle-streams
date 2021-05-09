@@ -14,12 +14,9 @@ GLMakie.AbstractPlotting.inline!(true) # do not show window while animating
 	radius::Float64
 	spawn_radius::Float64
 
-	spawn_ymin::Float64
-	spawn_ymax::Float64
-	spawn_vmin::Float64
-	spawn_vmax::Float64
-	spawn_angmin::Float64
-	spawn_angmax::Float64
+	position_spawner::Function
+	velocity_spawner::Function
+	max_velocity::Float64 # promise thet velocity_spawner never spawns with larger velocity
 end
 
 struct Simulation
@@ -34,31 +31,6 @@ struct Simulation
 
 	ncellsx::Int
 	ncellsy::Int
-end
-
-struct Spawner
-	# position
-	x::Float64
-	ymin::Float64
-	ymax::Float64
-
-	# velocity
-	vmin::Float64
-	vmax::Float64
-	angmin::Float64
-	angmax::Float64
-end
-
-function spawn(spawner::Spawner)
-	x = spawner.x
-	y = spawner.ymin + rand() * (spawner.ymax - spawner.ymin)
-	pos = (x, y)
-
-	v = spawner.vmin + rand() * (spawner.vmax - spawner.vmin)
-	ang = spawner.angmin + rand() * (spawner.angmax - spawner.angmin)
-	vel = (v * cos(ang), v * sin(ang))
-
-	return pos, vel
 end
 
 function out_of_bounds(width, height, pos)
@@ -103,7 +75,7 @@ function scatter_wall(pos, vel, radius)
 end
 
 function simulate(params)
-    dt = 0.1 * params.radius / params.spawn_vmax # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
+    dt = 0.1 * params.radius / params.max_velocity # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     times = 0:dt:params.T
     NT = length(times)
     
@@ -124,7 +96,7 @@ function simulate(params)
 	cellwidth = params.width / ncellsx
 	cellheight = params.height / ncellsy
 
-	max_parts_per_cell = 16 * Int(round(9*cellwidth*cellheight / (pi*min_radius^2))) # assume complete filling for simple upper bound
+	max_parts_per_cell = 16 * Int(round(9*cellwidth*cellheight / (pi*min_radius^2))) # assume complete filling for simple upper bound # TODO: can use just params.radius here
 
 	# TODO: use some form of map type?
 	# maps from cell -> particle and particle -> cell
@@ -183,9 +155,6 @@ function simulate(params)
 		push!(trajectories[part2id[n]], (times[iter], positions[n][1], positions[n][2]))
 	end
 
-	spawnerl = Spawner(-params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, 0  + params.spawn_angmin, 0  + params.spawn_angmax)
-	spawnerr = Spawner(+params.width/2, params.spawn_ymin, params.spawn_ymax, params.spawn_vmin, params.spawn_vmax, pi + params.spawn_angmin, pi + params.spawn_angmax)
-
 	function spawn_particle(n, iter, pos, vel)
 		alive[n] = true
 		positions[n] = pos
@@ -220,8 +189,10 @@ function simulate(params)
 				kill_particle(n1, iter)
 			end
 			if !alive[n1]
-				pos, vel = spawn(n1 % 2 == 0 ? spawnerl : spawnerr)
+				pos = params.position_spawner(params, n1, times[iter])
                 if position_is_available(pos)
+					vel = params.velocity_spawner(params, n1, times[iter], pos)
+					@assert dot(vel, vel) <= params.max_velocity^2+1e-10 "Spawned particle with speed $(norm(vel)) > $(params.max_velocity) = max_velocity"
 					spawn_particle(n1, iter, pos, vel)
                 end
             end
@@ -331,22 +302,18 @@ end
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 # TODO: animate underway (i.e. do not store tons of positions)
 # TODO: output trajectories
-# TODO: let user write own spawning functions?
 # TODO: animate only part of a simulation
 
 params = Parameters(
-	N = 4000,
-	T = 25.0,
+	N = 400,
+	T = 10.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.05,
 	spawn_radius = 0.2,
-	spawn_ymin = 0.0,
-	spawn_ymax = 6.0,
-	spawn_vmin = 2.0, 
-	spawn_vmax = 3.0,
-	spawn_angmin = -pi/6, 
-	spawn_angmax = +pi/6,
+	position_spawner = (p, n, t)      -> (isodd(n) ? -p.width/2 : +p.width/2, rand()*p.height/4),
+	velocity_spawner = (p, n, t, pos) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (3*cos(ang), 3*sin(ang))),
+	max_velocity = 3.0,
 )
 sim = simulate(params)
-animate_trajectories(sim; path="anim.mkv", frameskip=5)
+animate_trajectories(sim; path="anim.mkv", frameskip=10)
