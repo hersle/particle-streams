@@ -12,7 +12,7 @@ GLMakie.AbstractPlotting.inline!(true) # do not show window while animating
 	height::Float64
 
 	radius::Float64
-	spawn_separation::Float64
+	spawn_radius::Float64
 
 	spawn_ymin::Float64
 	spawn_ymax::Float64
@@ -117,12 +117,14 @@ function simulate(params)
     alive_samples = Array{Bool, 2}(undef, params.N, NT)
 
 	# aim for 1 particle in each cell, so one particle can be in at most 4 cells
-	ncellsx = Int(floor(params.width / (2*params.radius))-1) # floor & reduce, so at most 4 particles in each cell
-	ncellsy = Int(floor(params.height / (2*params.radius))-1)
+	max_radius = max(params.radius, params.spawn_radius)
+	min_radius = min(params.radius, params.spawn_radius)
+	ncellsx = Int(floor(params.width / (2*max_radius))-1) # floor & reduce, so at most 4 particles in each cell
+	ncellsy = Int(floor(params.height / (2*max_radius))-1)
 	cellwidth = params.width / ncellsx
 	cellheight = params.height / ncellsy
 
-	max_parts_per_cell = 16 * Int(round(9*cellwidth*cellheight / (pi*params.radius^2))) # assume complete filling for simple upper bound
+	max_parts_per_cell = 16 * Int(round(9*cellwidth*cellheight / (pi*min_radius^2))) # assume complete filling for simple upper bound
 
 	# TODO: use some form of map type?
 	# maps from cell -> particle and particle -> cell
@@ -200,7 +202,7 @@ function simulate(params)
 				for i in 1:celllen[cx,cy]
 					n2 = cell2part[cx,cy,i][1]
 					pos2 = positions[n2]
-					if norm(pos2 .- pos1) < params.spawn_separation
+					if norm(pos2 .- pos1) < 2 * params.spawn_radius
 						return false
 					end
 				end
@@ -302,7 +304,7 @@ function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
 			t2 = round(sim.times[end], digits=1)
 			t = round(sim.times[frames[f]], digits=1)
 			R = sim.params.radius
-			S = sim.params.spawn_separation
+			S = sim.params.spawn_radius
 			axis.title = "N = $nalive        t = $t / $t2        R = $R        S = $S"
 
 			recordframe!(io)
@@ -333,12 +335,12 @@ end
 # TODO: animate only part of a simulation
 
 params = Parameters(
-	N = 800,
-	T = 1.0,
+	N = 4000,
+	T = 25.0,
 	width  = 30.0,
 	height = 15.0,
-	radius = 0.1,
-	spawn_separation = 0.2,
+	radius = 0.05,
+	spawn_radius = 0.2,
 	spawn_ymin = 0.0,
 	spawn_ymax = 6.0,
 	spawn_vmin = 2.0, 
