@@ -96,7 +96,7 @@ function simulate(params)
 	cellwidth = params.width / ncellsx
 	cellheight = params.height / ncellsy
 
-	max_parts_per_cell = 16 * Int(round(9*cellwidth*cellheight / (pi*min_radius^2))) # assume complete filling for simple upper bound # TODO: can use just params.radius here
+	max_parts_per_cell = 16 * Int(round(9*cellwidth*cellheight / (pi*params.radius^2))) # assume complete filling for simple upper bound
 
 	# TODO: use some form of map type?
 	# maps from cell -> particle and particle -> cell
