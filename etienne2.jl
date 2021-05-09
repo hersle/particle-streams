@@ -302,9 +302,25 @@ function plot_trajectories(sim, which)
 	)
 end
 
+function write_trajectories(sim, path)
+	f = open(path, "w")
+
+	# write explanation comment
+	write(f, "# n t1 x1 y1 t2 x2 y2 t3 x3 y3 ...\n")
+
+	for (n, trajectory) in enumerate(sim.trajectories)
+		write(f, "$n")
+		for (t, x, y) in trajectory
+			write(f, " $t $x $y")
+		end
+		write(f, "\n")
+	end
+
+	close(f)
+end
+
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 # TODO: animate underway (i.e. do not store tons of positions)
-# TODO: output trajectories
 
 params = Parameters(
 	N = 400,
@@ -318,4 +334,5 @@ params = Parameters(
 	max_velocity = 3.0,
 )
 sim = simulate(params)
-animate_trajectories(sim; path="anim.mkv", frameskip=10, t1=5.0, t2=10.0)
+animate_trajectories(sim; path="anim.mkv", t1=5.0, t2=10.0, frameskip=10)
+#write_trajectories(sim, "trajectories.dat")
