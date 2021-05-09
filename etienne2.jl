@@ -244,10 +244,13 @@ function simulate(params)
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
 
-function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
+function animate_trajectories(sim::Simulation; t1=0, t2=sim.times[end], path="anim.mkv", frameskip=1)
 	# TODO: force clear, new figure or something?
 
-	frames = 1:frameskip:length(sim.times)
+	# find closest indices in times-array corresponding to t1 and t2
+	f1 = findmin(abs.(sim.times .- t1))[2]
+	f2 = findmin(abs.(sim.times .- t2))[2]
+	frames = f1:frameskip:f2
 	nf = length(frames)
 
 	figure = Figure(resolution=(600*sim.params.width/sim.params.height, 600))
@@ -265,7 +268,7 @@ function animate_trajectories(sim::Simulation; path="anim.mkv", frameskip=1)
 	positions = Node(sim.positions[:,1])
 	scatter!(axis, positions, markersize=2*sim.params.radius, markerspace=AbstractPlotting.SceneSpace, color=:red)
 
-	fps = Int(round(nf / (sim.times[end] - sim.times[1]))) # make duration equal to simulation time in seconds
+	fps = Int(round(nf / (t2 - t1))) # make duration equal to simulation time in seconds
 	record(figure, path, framerate=fps) do io
 		for f in 1:nf
 			print("\rAnimating frame $f / $nf ...")
@@ -302,7 +305,6 @@ end
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 # TODO: animate underway (i.e. do not store tons of positions)
 # TODO: output trajectories
-# TODO: animate only part of a simulation
 
 params = Parameters(
 	N = 400,
@@ -316,4 +318,4 @@ params = Parameters(
 	max_velocity = 3.0,
 )
 sim = simulate(params)
-animate_trajectories(sim; path="anim.mkv", frameskip=10)
+animate_trajectories(sim; path="anim.mkv", frameskip=10, t1=5.0, t2=10.0)
