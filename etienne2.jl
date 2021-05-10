@@ -2,6 +2,7 @@ using LinearAlgebra
 using Printf
 using ProgressMeter
 using GLMakie
+using Profile
 GLMakie.AbstractPlotting.inline!(true) # do not show window while animating
 
 @Base.kwdef struct Parameters # allow construction with Parameters(N=...)
@@ -74,7 +75,7 @@ function scatter_wall(pos, vel, radius)
 	end
 end
 
-function simulate(params::Parameters; write_trajectories=false, animate=false)
+function simulate(params::Parameters; sample=false, write_trajectories=false, animation_path="anim.mkv")
     dt = 0.1 * params.radius / params.max_velocity # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     times = 0:dt:params.T
     NT = length(times)
@@ -84,9 +85,10 @@ function simulate(params::Parameters; write_trajectories=false, animate=false)
     velocities = fill((0.0, 0.0), params.N)
 	alive = fill(false, params.N)
     
-    positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
-    velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, params.N, NT)
-    alive_samples = Array{Bool, 2}(undef, params.N, NT)
+	sample_size = sample ? (params.N, NT) : (0, 0)
+	positions_samples = Array{Tuple{Float64, Float64}, 2}(undef, sample_size)
+	velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, sample_size)
+	alive_samples = Array{Bool, 2}(undef, sample_size)
 
 	# aim for 1 particle in each cell, so one particle can be in at most 4 cells
 	max_radius = max(params.radius, params.spawn_radius)
@@ -184,66 +186,101 @@ function simulate(params::Parameters; write_trajectories=false, animate=false)
 		end
 		return true
 	end
+
+	# animation stuff
+	figure = Figure(resolution=(600*params.width/params.height, 600))
+	axis = Axis(figure[1,1], 
+		xlabel="W = $(params.width)",  xminorticks=IntervalsBetween(ncellsx), xminorgridvisible=true,
+		ylabel="H = $(params.height)", yminorticks=IntervalsBetween(ncellsy), yminorgridvisible=true,
+	)
+	axis.xticks = [-params.width/2, +params.width/2]
+	axis.yticks = [0, +params.height]
+	hidexdecorations!(axis, label=false, minorgrid=false)
+	hideydecorations!(axis, label=false, minorgrid=false)
+	xlims!(axis, -params.width/2, +params.width/2)
+	ylims!(axis, 0, +params.height)
+
+	animation_positions = Node(positions)
+	scatter!(axis, animation_positions, markersize=2*params.radius, markerspace=AbstractPlotting.SceneSpace, color=:red)
+
+	frameskip = 1
+	frames = 1:frameskip:NT
+	fps = Int(round(length(frames) / params.T)) # make duration equal to simulation time in seconds
     
-    for iter in 1:NT
-		# kill dead particles and (try to) respawn them
-		print("\rSimulating time step $iter / $NT ...")
+	record(figure, animation_path, framerate=fps) do io
+		for iter in 1:NT
+			# kill dead particles and (try to) respawn them
+			print("\rSimulating time step $iter / $NT ...")
 
-		for n1 in 1:params.N
-            if alive[n1] && out_of_bounds(params.width, params.height, positions[n1])
-				kill_particle(n1, iter)
-			end
-			if !alive[n1]
-				pos = params.position_spawner(params, n1, times[iter])
-                if position_is_available(pos)
-					vel = params.velocity_spawner(params, n1, times[iter], pos)
-					@assert dot(vel, vel) <= params.max_velocity^2+1e-10 "Spawned particle with speed $(norm(vel)) > $(params.max_velocity) = max_velocity"
-					spawn_particle(n1, iter, pos, vel)
-                end
-            end
-
-			# sample current positions and velocities
-			positions_samples[n1,iter] = positions[n1]
-			velocities_samples[n1,iter] = velocities[n1]
-			alive_samples[n1,iter] = alive[n1]
-
-			if alive[n1]
-				# integrate particle positions (and update cell locations)
-				newpos = positions[n1] .+ velocities[n1] .* dt
-				positions[n1] = newpos
-				rempart(n1) # remove from current cell (based on prev pos)
-				addpart(n1) # add to next cell (based on current pos)
-
-				has_scattered = false
-
-				# particle - particle interactions
-				pos1, vel1 = positions[n1], velocities[n1]
-				cx1, cy1, cx2, cy2 = pos2cells(pos1, params.width, params.height, ncellsx, ncellsy)
-				for cx in cx1:cx2 # TODO: create some form of cleaner iteration
-					for cy in cy1:cy2
-						for i in 1:celllen[cx,cy]
-							n2 = cell2part[cx,cy,i][1]
-							pos2, vel2 = positions[n2], velocities[n2]
-							if alive[n2] && n2 > n1
-								vel1, vel2, scattered = scatter_particles(pos1, vel1, pos2, vel2, params.radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
-								velocities[n1], velocities[n2] = vel1, vel2
-								has_scattered = has_scattered || scattered
-							end
-						end
+			for n1 in 1:params.N
+				if alive[n1] && out_of_bounds(params.width, params.height, positions[n1])
+					kill_particle(n1, iter)
+				end
+				if !alive[n1]
+					pos = params.position_spawner(params, n1, times[iter])
+					if position_is_available(pos)
+						vel = params.velocity_spawner(params, n1, times[iter], pos)
+						@assert dot(vel, vel) <= params.max_velocity^2+1e-10 "Spawned particle with speed $(norm(vel)) > $(params.max_velocity) = max_velocity"
+						spawn_particle(n1, iter, pos, vel)
 					end
 				end
 
-				# particle - wall interactions
-				vel1, scattered = scatter_wall(pos1, vel1, params.radius)
-				velocities[n1] = vel1
-				has_scattered = has_scattered || scattered
+				# sample current positions and velocities
+				if sample
+					positions_samples[n1,iter] = positions[n1]
+					velocities_samples[n1,iter] = velocities[n1]
+					alive_samples[n1,iter] = alive[n1]
+				end
 
-				if has_scattered && write_trajectories
-					log_trajectory(n1, iter) # log trajectory only when scattering
+				if alive[n1]
+					# integrate particle positions (and update cell locations)
+					newpos = positions[n1] .+ velocities[n1] .* dt
+					positions[n1] = newpos
+					rempart(n1) # remove from current cell (based on prev pos)
+					addpart(n1) # add to next cell (based on current pos)
+
+					has_scattered = false
+
+					# particle - particle interactions
+					pos1, vel1 = positions[n1], velocities[n1]
+					cx1, cy1, cx2, cy2 = pos2cells(pos1, params.width, params.height, ncellsx, ncellsy)
+					for cx in cx1:cx2 # TODO: create some form of cleaner iteration
+						for cy in cy1:cy2
+							for i in 1:celllen[cx,cy]
+								n2 = cell2part[cx,cy,i][1]
+								pos2, vel2 = positions[n2], velocities[n2]
+								if alive[n2] && n2 > n1
+									vel1, vel2, scattered = scatter_particles(pos1, vel1, pos2, vel2, params.radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
+									velocities[n1], velocities[n2] = vel1, vel2
+									has_scattered = has_scattered || scattered
+								end
+							end
+						end
+					end
+
+					# particle - wall interactions
+					vel1, scattered = scatter_wall(pos1, vel1, params.radius)
+					velocities[n1] = vel1
+					has_scattered = has_scattered || scattered
+
+					if has_scattered && write_trajectories
+						log_trajectory(n1, iter) # log trajectory only when scattering
+					end
 				end
 			end
+
+			if iter in frames
+				animation_positions[] = positions
+				nalive = sum(alive)
+				t = round(times[iter], digits=1)
+				R = params.radius
+				S = params.spawn_radius
+				axis.title = "N = $nalive        t = $t        R = $R        S = $S"
+				recordframe!(io)
+			end
 		end
-    end
+	end
+	return figure
 	println() # finish progress printing
     
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
@@ -328,8 +365,8 @@ end
 # TODO: animate underway (i.e. do not store tons of positions)
 
 params = Parameters(
-	N = 700,
-	T = 10.0,
+	N = 50,
+	T = 2.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.05,
@@ -338,6 +375,8 @@ params = Parameters(
 	velocity_spawner = (p, n, t, pos) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (4*cos(ang), 4*sin(ang))),
 	max_velocity = 4.0,
 )
+sim = simulate(params, write_trajectories=false)
+Profile.clear_malloc_data() # reset profiler stats after one run
 sim = simulate(params, write_trajectories=false)
 #animate_trajectories(sim; path="anim.mkv", frameskip=10)
 #write_trajectories(sim, "trajectories.dat")
