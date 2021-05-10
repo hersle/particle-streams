@@ -74,7 +74,7 @@ function scatter_wall(pos, vel, radius)
 	end
 end
 
-function simulate(params)
+function simulate(params::Parameters; write_trajectories=false, animate=false)
     dt = 0.1 * params.radius / params.max_velocity # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     times = 0:dt:params.T
     NT = length(times)
@@ -104,6 +104,7 @@ function simulate(params)
 	cell2part = Array{Tuple{Int, Int}, 3}(undef, ncellsx, ncellsy, max_parts_per_cell) # (cx, cy, ci) -> (particle id, cell #1-4)
 	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, params.N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
 
+	println("Write trajectories:  $write_trajectories")
 	println("Number of cells:     ($ncellsx, $ncellsy)")
 	println("Max parts. per cell: $max_parts_per_cell")
 
@@ -137,7 +138,9 @@ function simulate(params)
 	function kill_particle(n, iter)
 		rempart(n)
 		alive[n] = false
-		log_trajectory(n, iter)
+		if write_trajectories
+			log_trajectory(n, iter)
+		end
 		positions[n] = (-1000 * params.width/2, -1000) # move outside area (just to remove from plot)
 	end
 
@@ -160,8 +163,10 @@ function simulate(params)
 		positions[n] = pos
 		velocities[n] = vel
 		addpart(n) # add to cells
-		start_trajectory(n)
-		log_trajectory(n, iter)
+		if write_trajectories
+			start_trajectory(n)
+			log_trajectory(n, iter)
+		end
 	end
 
 	function position_is_available(pos1)
@@ -233,7 +238,7 @@ function simulate(params)
 				velocities[n1] = vel1
 				has_scattered = has_scattered || scattered
 
-				if has_scattered
+				if has_scattered && write_trajectories
 					log_trajectory(n1, iter) # log trajectory only when scattering
 				end
 			end
@@ -323,16 +328,16 @@ end
 # TODO: animate underway (i.e. do not store tons of positions)
 
 params = Parameters(
-	N = 400,
+	N = 700,
 	T = 10.0,
 	width  = 30.0,
 	height = 15.0,
 	radius = 0.05,
-	spawn_radius = 0.2,
+	spawn_radius = 0.10,
 	position_spawner = (p, n, t)      -> (isodd(n) ? -p.width/2 : +p.width/2, rand()*p.height/4),
-	velocity_spawner = (p, n, t, pos) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (3*cos(ang), 3*sin(ang))),
-	max_velocity = 3.0,
+	velocity_spawner = (p, n, t, pos) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (4*cos(ang), 4*sin(ang))),
+	max_velocity = 4.0,
 )
-sim = simulate(params)
-animate_trajectories(sim; path="anim.mkv", t1=5.0, t2=10.0, frameskip=10)
+sim = simulate(params, write_trajectories=false)
+#animate_trajectories(sim; path="anim.mkv", frameskip=10)
 #write_trajectories(sim, "trajectories.dat")
