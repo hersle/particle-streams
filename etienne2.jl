@@ -3,9 +3,22 @@ using Printf
 using ProgressMeter
 using Profile
 using GLMakie
+using StaticArrays
 GLMakie.AbstractPlotting.inline!(true) # do not show window while animating
 
-@Base.kwdef struct Parameters{F1<:Function, F2<:Function} # allow construction with Parameters(N=...)
+struct Wall
+	p1::Tuple{Float64, Float64}
+	p2::Tuple{Float64, Float64}
+	n::Tuple{Float64, Float64}
+
+	function Wall(p1::Tuple{Float64, Float64}, p2::Tuple{Float64, Float64})
+		n = (-(p2[2]-p1[2]), p2[1]-p1[1])
+		n = n ./ norm(n)
+		return new(p1, p2, n)
+	end
+end
+
+@Base.kwdef struct Parameters{F1<:Function, F2<:Function, WN} # allow construction with Parameters(N=...)
 	N::Int
 	T::Float64
 
@@ -18,6 +31,8 @@ GLMakie.AbstractPlotting.inline!(true) # do not show window while animating
 	position_spawner::F1 # F1 makes compiler figure out types # https://stackoverflow.com/questions/52992375/julia-mutable-struct-with-attribute-which-is-a-function-and-code-warntype
 	velocity_spawner::F2 # F2 makes compiler figure out types
 	max_velocity::Float64 # promise thet velocity_spawner never spawns with larger velocity
+
+	walls::SVector{WN, Wall} # use SVector to avoid allocations
 end
 
 struct Simulation
@@ -57,6 +72,7 @@ function pos2cells(pos, width, height, ncellsx, ncellsy)
 end
 
 function scatter_particles(pos1, vel1, pos2, vel2, radius)
+	# TODO: normalize velocity, enforce its magnitude, prevent bugs if particles overlap partly when colliding?
 	r = norm(pos2 .- pos1)
 	if r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
 		dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
@@ -64,6 +80,17 @@ function scatter_particles(pos1, vel1, pos2, vel2, radius)
 		return vel1, vel2, true
 	else
 		return vel1, vel2, false
+	end
+end
+
+function scatter(pos::Tuple{Float64, Float64}, vel::Tuple{Float64, Float64}, wall::Wall)
+	closest_point = wall.p1 .+ (wall.p2 .- wall.p1) .* (dot(pos .- wall.p1, wall.p2 .- wall.p1) / dot(wall.p2 .- wall.p1, wall.p2 .- wall.p1))
+	sdist = dot(pos .- closest_point, wall.n)
+	wallvel = dot(vel, wall.n)
+	if sdist < 0 && wallvel < 0 # is "inside" wall and heading into wall
+		return vel .- wall.n .* (2*wallvel), true
+	else
+		return vel, false
 	end
 end
 
@@ -111,6 +138,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, params.N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
 
 	println("Write trajectories:  $write_trajectories")
+	println("Write animation:     $animation_path")
 	println("Number of cells:     ($ncellsx, $ncellsy)")
 	println("Max parts. per cell: $max_parts_per_cell")
 
@@ -242,9 +270,11 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 				end
 
 				# particle - wall interactions
-				vel1, scattered = scatter_wall(pos1, vel1, params.radius)
-				velocities[n1] = vel1
-				has_scattered = has_scattered || scattered
+				for wall in params.walls
+					vel1, scattered = scatter(pos1, vel1, wall)
+					velocities[n1] = vel1
+					has_scattered = has_scattered || scattered
+				end
 
 				if has_scattered && write_trajectories
 					log_trajectory(n1, iter) # log trajectory only when scattering
@@ -272,6 +302,15 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 
 		animation_positions = Node(positions)
 		scatter!(axis, animation_positions, markersize=2*params.radius, markerspace=AbstractPlotting.SceneSpace, color=:red)
+
+		# draw static geometry
+		wallpoints = Array{Tuple{Float64, Float64}}(undef, 0)
+		for wall in params.walls
+			push!(wallpoints, wall.p1)
+			push!(wallpoints, wall.p2)
+		end
+		println(wallpoints)
+		linesegments!(axis, wallpoints)
 
 		# animation stuff
 		# find closest indices in times-array corresponding to t1 and t2
@@ -378,18 +417,20 @@ end
 # TODO: animate underway (i.e. do not store tons of positions)
 
 params = Parameters(
-	N = 9000,
-	T = 50.0,
-	width  = 30.0,
-	height = 40.0,
+	N = 1,
+	T = 10.0,
+	width  = 10.0,
+	height = 10.0,
 	radius = 0.05,
 	spawn_radius = 0.10,
-	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? -p.width/2 : +p.width/2, rand()*p.height/4),
+	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? -p.width/2 : +p.width/2, rand()*5.0),
 	velocity_spawner = (p::Parameters, n::Int, t::Float64) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (4*cos(ang), 4*sin(ang))),
 	max_velocity = 4.0,
+	walls = SVector(Wall((0.0,0.0), (0.0,10.0)), Wall((-10.0,0.0),(+10.0,0.0)))
 )
-sim = simulate(params, animation_path="anim.mkv", frameskip=25)
-#Profile.clear_malloc_data() # reset profiler stats after one run
+sim = simulate(params, animation_path="", frameskip=25)
+Profile.clear_malloc_data() # reset profiler stats after one run
+sim = simulate(params, animation_path="", frameskip=25)
 #sim = simulate(params)
 #animate_trajectories(sim; path="anim.mkv", frameskip=10)
 #write_trajectories(sim, "trajectories.dat")
