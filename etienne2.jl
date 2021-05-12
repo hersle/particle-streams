@@ -423,17 +423,24 @@ end
 
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 # TODO: animate underway (i.e. do not store tons of positions)
+walls_cross = SVector(
+	Wall((-1.0,+1.0), (-10.0,+1.0)), Wall((-1.0,+10.0), (-1.0,+1.0)),
+	Wall((-10.0,-1.0), (-1.0,-1.0)), Wall((-1.0,-1.0), (-1.0,-10.0)),
+	Wall((+10.0,+1.0), (+1.0,+1.0)), Wall((+1.0,+1.0), (+1.0,+10.0)),
+	Wall((+1.0,-1.0), (+10.0,-1.0)), Wall((+1.0,-10.0), (+1.0,-1.0)),
+)
 
 params = Parameters(
 	N = 50,
 	T = 20.0,
-	bounds = Rectangle(-5.0, -5.0, +5.0, 10.0),
-	radius = 0.20,
-	spawn_radius = 0.20,
-	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? p.bounds.x1 : p.bounds.x2, rand()*5.0),
+	bounds = Rectangle(-10.0, -10.0, +10.0, +10.0),
+	radius = 0.10,
+	spawn_radius = 0.10,
+	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? p.bounds.x1 : p.bounds.x2, -1.0 + 2.0*rand()),
 	velocity_spawner = (p::Parameters, n::Int, t::Float64) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (4*cos(ang), 4*sin(ang))),
 	max_velocity = 4.0,
-	walls = SVector(Wall((0.0,0.0), (0.0,10.0)), Wall((-10.0,0.0),(+10.0,0.0)))
+	#walls = SVector(Wall((0.0,0.0), (0.0,10.0)), Wall((-10.0,0.0),(+10.0,0.0)))
+	walls = walls_cross,
 )
 sim = simulate(params, animation_path="anim.mkv", frameskip=10)
 Profile.clear_malloc_data() # reset profiler stats after one run
