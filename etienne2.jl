@@ -91,7 +91,18 @@ function scatter_particles(pos1, vel1, pos2, vel2, radius)
 	end
 end
 
-function scatter(pos::Tuple{Float64, Float64}, vel::Tuple{Float64, Float64}, wall::Wall)
+# TODO: make more efficient?
+function scatter(pos::Tuple{Float64, Float64}, vel::Tuple{Float64, Float64}, wall::Wall, dt::Float64)
+	if dot(pos .- wall.p1, wall.p2 .- wall.p1) < 0 || dot(pos .- wall.p2, wall.p1 .- wall.p2) < 0
+		return vel, false
+	end
+
+	# use dt to check that the particle actually penetrated the wall in the last time step TODO: do smarter?
+	lastpos = pos .- vel .* dt
+	if dot(wall.n, pos .- wall.p1) * dot(wall.n, lastpos .- wall.p1) > 0
+		return vel, false # did not pass wall
+	end
+
 	closest_point = wall.p1 .+ (wall.p2 .- wall.p1) .* (dot(pos .- wall.p1, wall.p2 .- wall.p1) / dot(wall.p2 .- wall.p1, wall.p2 .- wall.p1))
 	sdist = dot(pos .- closest_point, wall.n)
 	wallvel = dot(vel, wall.n)
@@ -275,7 +286,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 
 				# particle - wall interactions
 				for wall in params.walls
-					vel1, scattered = scatter(pos1, vel1, wall)
+					vel1, scattered = scatter(pos1, vel1, wall, dt)
 					velocities[n1] = vel1
 					has_scattered = has_scattered || scattered
 				end
