@@ -6,13 +6,22 @@ using GLMakie
 using StaticArrays
 GLMakie.AbstractPlotting.inline!(true) # do not show window while animating
 
+struct Rectangle
+	x1::Float64
+	y1::Float64
+	x2::Float64
+	y2::Float64
+end
+
+width(rect::Rectangle) = rect.x2 - rect.x1
+
 struct Wall
 	p1::Tuple{Float64, Float64}
 	p2::Tuple{Float64, Float64}
 	n::Tuple{Float64, Float64}
 
 	function Wall(p1::Tuple{Float64, Float64}, p2::Tuple{Float64, Float64})
-		n = (-(p2[2]-p1[2]), p2[1]-p1[1])
+		n = (-(p2[2]-p1[2]), p2[1]-p1[1]) # normal is the vector that points normally left out of (p1 - p2)
 		n = n ./ norm(n)
 		return new(p1, p2, n)
 	end
@@ -22,8 +31,7 @@ end
 	N::Int
 	T::Float64
 
-	width::Float64
-	height::Float64
+	bounds::Rectangle
 
 	radius::Float64
 	spawn_radius::Float64
@@ -49,21 +57,21 @@ struct Simulation
 	ncellsy::Int
 end
 
-function out_of_bounds(width, height, pos)
+function out_of_bounds(rect::Rectangle, pos::Tuple{Float64, Float64})
     x, y = pos[1], pos[2]
-    return x < -width/2 || x > +width/2 || y > +height || y < -50
+    return x < rect.x1 || x > rect.x2 || y < rect.y1 || y > rect.y2
 end
 
-function pos2cell(pos, width, height, ncellsx, ncellsy) 
-	cx = clamp(1 + (pos[1]+width/2)/width*ncellsx, 1, ncellsx)
-	cy = clamp(1 + pos[2]/height*ncellsy, 1, ncellsy)
+function pos2cell(pos, rect::Rectangle, ncellsx, ncellsy) 
+	cx = clamp(1 + (pos[1]-rect.x1)/(rect.x2-rect.x1)*ncellsx, 1, ncellsx)
+	cy = clamp(1 + (pos[2]-rect.y1)/(rect.y2-rect.y1)*ncellsy, 1, ncellsy)
 	return Int(floor(cx)), Int(floor(cy))
 end
 
-function pos2cells(pos, width, height, ncellsx, ncellsy)
+function pos2cells(pos, rect::Rectangle, ncellsx, ncellsy)
 	# assumes that cells are chosen so one object can be at most in 4 cells
-	cx1 = Int(floor(1 + (pos[1]+width/2)/width*ncellsx - 0.5)) # -0.5 makes this the "leftmost" cell
-	cy1 = Int(floor(1 + pos[2]/height*ncellsy - 0.5))
+	cx1 = Int(floor(1 + (pos[1]-rect.x1)/(rect.x2-rect.x1)*ncellsx - 0.5)) # -0.5 makes this the "leftmost" cell
+	cy1 = Int(floor(1 + (pos[2]-rect.y1)/(rect.y2-rect.y1)*ncellsy - 0.5))
 	cx1 = clamp(cx1, 1, ncellsx-1)
 	cy1 = clamp(cy1, 1, ncellsy-1)
 	cx2 = cx1 + 1
@@ -102,16 +110,12 @@ function scatter_wall(pos, vel, radius)
 	end
 end
 
-function scatter_cross(pos, vel, radius)
-	crosswidth = 1.0
-end
-
 function simulate(params::Parameters; sample=false, write_trajectories=false, animation_path="", frameskip=1, anim_t1=0, anim_t2=params.T)
     dt = 0.1 * params.radius / params.max_velocity # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     times = 0:dt:params.T
     NT = length(times)
     
-	outsidepos = (-params.width/2 - 10 * params.radius, - 10 * params.radius)
+	outsidepos = (params.bounds.x1 - 10 * params.radius, params.bounds.y1 - 10 * params.radius)
     positions = fill(outsidepos, params.N)
     velocities = fill((0.0, 0.0), params.N)
 	alive = fill(false, params.N)
@@ -124,10 +128,10 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 	# aim for 1 particle in each cell, so one particle can be in at most 4 cells
 	max_radius = max(params.radius, params.spawn_radius)
 	min_radius = min(params.radius, params.spawn_radius)
-	ncellsx = Int(floor(params.width / (2*max_radius))-1) # floor & reduce, so at most 4 particles in each cell
-	ncellsy = Int(floor(params.height / (2*max_radius))-1)
-	cellwidth = params.width / ncellsx
-	cellheight = params.height / ncellsy
+	ncellsx = Int(floor((params.bounds.x2-params.bounds.x1) / (2*max_radius))-1) # floor & reduce, so at most 4 particles in each cell
+	ncellsy = Int(floor((params.bounds.y2-params.bounds.y1) / (2*max_radius))-1)
+	cellwidth = (params.bounds.x2-params.bounds.x1) / ncellsx
+	cellheight = (params.bounds.y2-params.bounds.y1) / ncellsy
 
 	max_parts_per_cell = 16 * Int(round(9*cellwidth*cellheight / (pi*params.radius^2))) # assume complete filling for simple upper bound
 
@@ -144,7 +148,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 
 	function addpart(n)
 		pos = positions[n]
-		cx1, cy1, cx2, cy2 = pos2cells(pos, params.width, params.height, ncellsx, ncellsy)
+		cx1, cy1, cx2, cy2 = pos2cells(pos, params.bounds, ncellsx, ncellsy)
 		# println("$cx1 $cy1 $cx2 $cy2")
 		celllen[cx1,cy1] += 1
 		celllen[cx1,cy2] += 1
@@ -175,7 +179,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 		if write_trajectories
 			log_trajectory(n, iter)
 		end
-		positions[n] = (-1000 * params.width/2, -1000) # move outside area (just to remove from plot)
+		positions[n] = outsidepos # move outside area (just to remove from plot)
 	end
 
 	part2id = Array{Int}(undef, params.N)
@@ -204,7 +208,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 	end
 
 	function position_is_available(pos1)
-		cx1, cy1, cx2, cy2 = pos2cells(pos1, params.width, params.height, ncellsx, ncellsy)
+		cx1, cy1, cx2, cy2 = pos2cells(pos1, params.bounds, ncellsx, ncellsy)
 		for cx in cx1:cx2 # TODO: create some form of cleaner iteration
 			for cy in cy1:cy2
 				for i in 1:celllen[cx,cy]
@@ -224,7 +228,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 		print("\rSimulating time step $iter / $NT ...")
 
 		for n1 in 1:params.N
-			if alive[n1] && out_of_bounds(params.width, params.height, positions[n1])
+			if alive[n1] && out_of_bounds(params.bounds, positions[n1])
 				kill_particle(n1, iter)
 			end
 			if !alive[n1]
@@ -254,7 +258,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 
 				# particle - particle interactions
 				pos1, vel1 = positions[n1], velocities[n1]
-				cx1, cy1, cx2, cy2 = pos2cells(pos1, params.width, params.height, ncellsx, ncellsy)
+				cx1, cy1, cx2, cy2 = pos2cells(pos1, params.bounds, ncellsx, ncellsy)
 				for cx in cx1:cx2 # TODO: create some form of cleaner iteration
 					for cy in cy1:cy2
 						for i in 1:celllen[cx,cy]
@@ -288,17 +292,17 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 			step(iter)
 		end
 	else
-		figure = Figure(resolution=(600*params.width/params.height, 600))
+		figure = Figure(resolution=(600*(params.bounds.x2-params.bounds.x1)/(params.bounds.y2-params.bounds.y1), 600))
 		axis = Axis(figure[1,1], 
-			xlabel="W = $(params.width)",  xminorticks=IntervalsBetween(ncellsx), xminorgridvisible=true,
-			ylabel="H = $(params.height)", yminorticks=IntervalsBetween(ncellsy), yminorgridvisible=true,
+			xlabel="W = $(params.bounds.x2-params.bounds.x1)",  xminorticks=IntervalsBetween(ncellsx), xminorgridvisible=true,
+			ylabel="H = $(params.bounds.y2-params.bounds.y1)", yminorticks=IntervalsBetween(ncellsy), yminorgridvisible=true,
 		)
-		axis.xticks = [-params.width/2, +params.width/2]
-		axis.yticks = [0, +params.height]
+		axis.xticks = [params.bounds.x1, params.bounds.x2]
+		axis.yticks = [params.bounds.y1, params.bounds.y2]
 		hidexdecorations!(axis, label=false, minorgrid=false)
 		hideydecorations!(axis, label=false, minorgrid=false)
-		xlims!(axis, -params.width/2, +params.width/2)
-		ylims!(axis, 0, +params.height)
+		xlims!(axis, params.bounds.x1, params.bounds.x2)
+		ylims!(axis, params.bounds.y1, params.bounds.y2)
 
 		animation_positions = Node(positions)
 		scatter!(axis, animation_positions, markersize=2*params.radius, markerspace=AbstractPlotting.SceneSpace, color=:red)
@@ -338,6 +342,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
 
+#= TODO: remove or update with latest changes
 function animate_trajectories(sim::Simulation; t1=0, t2=sim.times[end], path="", frameskip=1)
 	# TODO: force clear, new figure or something?
 
@@ -381,7 +386,9 @@ function animate_trajectories(sim::Simulation; t1=0, t2=sim.times[end], path="",
 	println() # finish progress printing
 	return figure
 end
+=#
 
+#= TODO: needs update with newest changes
 function plot_trajectories(sim, which)
 	plot()
 	setmarkersize(1.0)
@@ -395,6 +402,7 @@ function plot_trajectories(sim, which)
 		xlim=(-sim.params.width/2, +sim.params.width/2), ylim=(0, sim.params.height),
 	)
 end
+=#
 
 function write_trajectories(sim, path)
 	f = open(path, "w")
@@ -417,18 +425,17 @@ end
 # TODO: animate underway (i.e. do not store tons of positions)
 
 params = Parameters(
-	N = 1,
-	T = 10.0,
-	width  = 10.0,
-	height = 10.0,
-	radius = 0.05,
-	spawn_radius = 0.10,
-	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? -p.width/2 : +p.width/2, rand()*5.0),
+	N = 50,
+	T = 20.0,
+	bounds = Rectangle(-5.0, -5.0, +5.0, 10.0),
+	radius = 0.20,
+	spawn_radius = 0.20,
+	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? p.bounds.x1 : p.bounds.x2, rand()*5.0),
 	velocity_spawner = (p::Parameters, n::Int, t::Float64) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (4*cos(ang), 4*sin(ang))),
 	max_velocity = 4.0,
 	walls = SVector(Wall((0.0,0.0), (0.0,10.0)), Wall((-10.0,0.0),(+10.0,0.0)))
 )
-sim = simulate(params, animation_path="", frameskip=25)
+sim = simulate(params, animation_path="anim.mkv", frameskip=10)
 Profile.clear_malloc_data() # reset profiler stats after one run
 sim = simulate(params, animation_path="", frameskip=25)
 #sim = simulate(params)
