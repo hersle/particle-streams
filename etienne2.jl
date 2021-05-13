@@ -123,7 +123,7 @@ function scatter_wall(pos, vel, radius)
 	end
 end
 
-function simulate(params::Parameters; sample=false, write_trajectories=false, animation_path="", frameskip=1, anim_t1=0, anim_t2=params.T)
+function simulate(params::Parameters; sample=false, write_trajectories=false, animation_path="", frameskip=1, anim_t1=0, anim_t2=params.T, grid=false)
     dt = 0.1 * params.radius / params.max_velocity # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
     times = 0:dt:params.T
     NT = length(times)
@@ -313,13 +313,13 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 		)
 		axis.xticks = [params.bounds.x1, params.bounds.x2]
 		axis.yticks = [params.bounds.y1, params.bounds.y2]
-		hidexdecorations!(axis, label=false, minorgrid=false)
-		hideydecorations!(axis, label=false, minorgrid=false)
+		hidexdecorations!(axis, label=false, minorgrid=!grid)
+		hideydecorations!(axis, label=false, minorgrid=!grid)
 		xlims!(axis, params.bounds.x1, params.bounds.x2)
 		ylims!(axis, params.bounds.y1, params.bounds.y2)
 
 		animation_positions = Node(positions)
-		scatter!(axis, animation_positions, markersize=2*params.radius, markerspace=AbstractPlotting.SceneSpace, color=:red)
+		scatter!(axis, animation_positions, markersize=2*params.radius, markerspace=AbstractPlotting.SceneSpace, color=:black)
 
 		# draw static geometry
 		wallpoints = Array{Tuple{Float64, Float64}}(undef, 0)
@@ -457,27 +457,27 @@ function crosswalls(bounds::Rectangle, wx::Float64, wy::Float64)
 end
 
 function position_spawner_leftright(bounds::Rectangle, height::Float64)
-	return (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? bounds.x1 : bounds.x2, bounds.y1 + (bounds.y2-bounds.y1)*rand())
+	return (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? bounds.x1 : bounds.x2, bounds.y1 + height*rand())
 end
 
 function velocity_spawner_angular(magnitude::Float64, ang1::Float64, ang2::Float64)
 	return (p::Parameters, n::Int, t::Float64) -> (ang = ang1 + (ang2-ang1)*rand() + pi*iseven(n); (4*cos(ang), 4*sin(ang)))
 end
 
-bounds = Rectangle(-10.0, -10.0, +10.0, +10.0)
+bounds = Rectangle(-20.0, -20.0, +20.0, +20.0)
 params = Parameters(
-	N = 500,
-	T = 5.0,
+	N = 40000,
+	T = 20.0,
 	bounds = bounds,
-	radius = 0.1,
-	spawn_radius = 0.20,
+	radius = 0.05,
+	spawn_radius = 0.10,
 	position_spawner = position_spawner_leftright(bounds, 5.0),
 	velocity_spawner = velocity_spawner_angular(4.0, -pi/6, +pi/6),
 	max_velocity = 4.0,
-	walls = crosswalls(bounds, 2.0, 2.0),
-	#walls = SVector(Wall((bounds.x1, bounds.y1+1), (bounds.x2, bounds.y1+1))),
+	#walls = crosswalls(bounds, 2.0, 2.0),
+	walls = SVector(Wall((bounds.x1, bounds.y1), (bounds.x2, bounds.y1))),
 )
-sim = simulate(params, animation_path="anim.mkv", frameskip=20)
+sim = simulate(params, animation_path="anim.mkv", frameskip=20, grid=false)
 #Profile.clear_malloc_data() # reset profiler stats after one run
 #animate_trajectories(sim; path="anim.mkv", frameskip=10)
 #write_trajectories(sim, "trajectories.dat")
