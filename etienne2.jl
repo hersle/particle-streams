@@ -4,7 +4,7 @@ using ProgressMeter
 using Profile
 using GLMakie
 using StaticArrays
-GLMakie.AbstractPlotting.inline!(true) # do not show window while animating
+GLMakie.AbstractPlotting.inline!(false) # show window while animating
 
 struct Rectangle
 	x1::Float64
@@ -333,6 +333,8 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 		frames = f1:frameskip:f2
 		fps = Int(round(length(frames) / (anim_t2 - anim_t1))) # make duration equal to simulation time in seconds
 
+		display(figure)
+
 		record(figure, animation_path, framerate=fps) do io
 			for iter in 1:NT
 				step(iter)
@@ -433,28 +435,38 @@ end
 
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
 # TODO: animate underway (i.e. do not store tons of positions)
-walls_cross = SVector(
-	Wall((-1.0,+1.0), (-10.0,+1.0)), Wall((-1.0,+10.0), (-1.0,+1.0)),
-	Wall((-10.0,-1.0), (-1.0,-1.0)), Wall((-1.0,-1.0), (-1.0,-10.0)),
-	Wall((+10.0,+1.0), (+1.0,+1.0)), Wall((+1.0,+1.0), (+1.0,+10.0)),
-	Wall((+1.0,-1.0), (+10.0,-1.0)), Wall((+1.0,-10.0), (+1.0,-1.0)),
-)
 
+function crosswalls(bounds::Rectangle, wx::Float64, wy::Float64)
+	x1, x4 = bounds.x1, bounds.x2
+	x2, x3 = (x1+x4)/2 - wx/2, (x1+x4)/2 + wx/2
+	y1, y4 = bounds.y1, bounds.y2
+	y2, y3 = (y1+y4)/2 - wy/2, (y1+y4)/2 + wy/2
+	nw1, nw2, nw3 = (x2, y4), (x2, y3), (x1, y3)
+	ne1, ne2, ne3 = (x4, y3), (x3, y3), (x3, y4)
+	se1, se2, se3 = (x3, y1), (x3, y2), (x4, y2)
+	sw1, sw2, sw3 = (x1, y2), (x2, y2), (x2, y1)
+	return SVector(
+		Wall(nw1, nw2), Wall(nw2, nw3),
+		Wall(ne1, ne2), Wall(ne2, ne3),
+		Wall(sw1, sw2), Wall(sw2, sw3),
+		Wall(se1, se2), Wall(se2, se3),
+	)
+end
+
+bounds = Rectangle(-10.0, -10.0, +10.0, +10.0)
 params = Parameters(
-	N = 50,
-	T = 20.0,
-	bounds = Rectangle(-10.0, -10.0, +10.0, +10.0),
-	radius = 0.10,
-	spawn_radius = 0.10,
-	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? p.bounds.x1 : p.bounds.x2, -1.0 + 2.0*rand()),
+	N = 5000,
+	T = 5.0,
+	bounds = bounds,
+	radius = 0.05,
+	spawn_radius = 0.20,
+	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? p.bounds.x1 : p.bounds.x2, -5.0 + 10.0*rand()),
 	velocity_spawner = (p::Parameters, n::Int, t::Float64) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (4*cos(ang), 4*sin(ang))),
 	max_velocity = 4.0,
 	#walls = SVector(Wall((0.0,0.0), (0.0,10.0)), Wall((-10.0,0.0),(+10.0,0.0)))
-	walls = walls_cross,
+	walls = crosswalls(bounds, 2.0, 2.0),
 )
-sim = simulate(params, animation_path="anim.mkv", frameskip=10)
-Profile.clear_malloc_data() # reset profiler stats after one run
-sim = simulate(params, animation_path="", frameskip=25)
-#sim = simulate(params)
+sim = simulate(params, animation_path="anim.mkv", frameskip=25)
+#Profile.clear_malloc_data() # reset profiler stats after one run
 #animate_trajectories(sim; path="anim.mkv", frameskip=10)
 #write_trajectories(sim, "trajectories.dat")
