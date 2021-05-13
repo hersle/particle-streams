@@ -453,18 +453,27 @@ function crosswalls(bounds::Rectangle, wx::Float64, wy::Float64)
 	)
 end
 
+function position_spawner_leftright(bounds::Rectangle, height::Float64)
+	return (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? bounds.x1 : bounds.x2, bounds.y1 + (bounds.y2-bounds.y1)*rand())
+end
+
+function velocity_spawner_angular(magnitude::Float64, ang1::Float64, ang2::Float64)
+	return (p::Parameters, n::Int, t::Float64) -> (ang = ang1 + (ang2-ang1)*rand() + pi*iseven(n); (4*cos(ang), 4*sin(ang)))
+end
+
 bounds = Rectangle(-10.0, -10.0, +10.0, +10.0)
+
 params = Parameters(
 	N = 5000,
 	T = 5.0,
 	bounds = bounds,
 	radius = 0.05,
 	spawn_radius = 0.20,
-	position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? p.bounds.x1 : p.bounds.x2, -5.0 + 10.0*rand()),
-	velocity_spawner = (p::Parameters, n::Int, t::Float64) -> (ang = -pi/6+pi/3*rand()+pi*iseven(n); (4*cos(ang), 4*sin(ang))),
+	position_spawner = position_spawner_leftright(bounds, 5.0),
+	velocity_spawner = velocity_spawner_angular(4.0, -pi/6, +pi/6),
 	max_velocity = 4.0,
-	#walls = SVector(Wall((0.0,0.0), (0.0,10.0)), Wall((-10.0,0.0),(+10.0,0.0)))
-	walls = crosswalls(bounds, 2.0, 2.0),
+	#walls = crosswalls(bounds, 2.0, 2.0),
+	walls = SVector(Wall((bounds.x1, bounds.y1+1), (bounds.x2, bounds.y1+1))),
 )
 sim = simulate(params, animation_path="anim.mkv", frameskip=25)
 #Profile.clear_malloc_data() # reset profiler stats after one run
