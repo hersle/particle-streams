@@ -91,21 +91,24 @@ function scatter_particles(pos1, vel1, pos2, vel2, radius)
 	end
 end
 
+function closest_point_on_line(p1::Tuple{Float64, Float64}, p2::Tuple{Float64, Float64}, p::Tuple{Float64, Float64})
+	return p1 .+ (p2 .- p1) .* (dot(p .- p1, p2 .- p1) / dot(p2 .- p1, p2 .- p1))
+end
+
+function signed_distance_from_line(p1::Tuple{Float64, Float64}, p2::Tuple{Float64, Float64}, n::Tuple{Float64, Float64}, p::Tuple{Float64, Float64})
+	return dot(p .- closest_point_on_line(p1, p2, p), n)
+end
+
 # TODO: make more efficient?
-function scatter(pos::Tuple{Float64, Float64}, vel::Tuple{Float64, Float64}, wall::Wall, lastpos::Tuple{Float64, Float64})
+function scatter(pos::Tuple{Float64, Float64}, vel::Tuple{Float64, Float64}, wall::Wall, lastpos::Tuple{Float64, Float64}, radius::Float64)
 	if dot(pos .- wall.p1, wall.p2 .- wall.p1) < 0 || dot(pos .- wall.p2, wall.p1 .- wall.p2) < 0
 		return vel, false
 	end
 
-	# check that the particle actually penetrated the wall in the last time step TODO: do smarter?
-	if dot(wall.n, pos .- wall.p1) * dot(wall.n, lastpos .- wall.p1) > 0
-		return vel, false # did not pass wall
-	end
-
-	closest_point = wall.p1 .+ (wall.p2 .- wall.p1) .* (dot(pos .- wall.p1, wall.p2 .- wall.p1) / dot(wall.p2 .- wall.p1, wall.p2 .- wall.p1))
-	sdist = dot(pos .- closest_point, wall.n)
-	wallvel = dot(vel, wall.n)
-	if sdist < 0 && wallvel < 0 # is "inside" wall and heading into wall
+	sdist = signed_distance_from_line(wall.p1, wall.p2, wall.n, pos)
+	lastsdist = signed_distance_from_line(wall.p1, wall.p2, wall.n, lastpos)
+	wallvel = dot(vel, wall.n) # velocity towards wall
+	if sdist < radius && lastsdist >= radius && wallvel < 0
 		return vel .- wall.n .* (2*wallvel), true
 	else
 		return vel, false
@@ -286,7 +289,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 
 				# particle - wall interactions
 				for wall in params.walls
-					vel1, scattered = scatter(pos1, vel1, wall, lastpos)
+					vel1, scattered = scatter(pos1, vel1, wall, lastpos, params.radius)
 					velocities[n1] = vel1
 					has_scattered = has_scattered || scattered
 				end
@@ -305,7 +308,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 	else
 		figure = Figure(resolution=(600*(params.bounds.x2-params.bounds.x1)/(params.bounds.y2-params.bounds.y1), 600))
 		axis = Axis(figure[1,1], 
-			xlabel="W = $(params.bounds.x2-params.bounds.x1)",  xminorticks=IntervalsBetween(ncellsx), xminorgridvisible=true,
+			xlabel="W = $(params.bounds.x2-params.bounds.x1)", xminorticks=IntervalsBetween(ncellsx), xminorgridvisible=true,
 			ylabel="H = $(params.bounds.y2-params.bounds.y1)", yminorticks=IntervalsBetween(ncellsy), yminorgridvisible=true,
 		)
 		axis.xticks = [params.bounds.x1, params.bounds.x2]
@@ -344,7 +347,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 					t = round(times[iter], digits=1)
 					R = params.radius
 					S = params.spawn_radius
-					axis.title = "N = $nalive        t = $t        R = $R        S = $S"
+					axis.title = "N = $nalive   t = $t   R = $R   S = $S"
 					recordframe!(io)
 				end
 			end
@@ -462,20 +465,19 @@ function velocity_spawner_angular(magnitude::Float64, ang1::Float64, ang2::Float
 end
 
 bounds = Rectangle(-10.0, -10.0, +10.0, +10.0)
-
 params = Parameters(
-	N = 5000,
+	N = 500,
 	T = 5.0,
 	bounds = bounds,
-	radius = 0.05,
+	radius = 0.1,
 	spawn_radius = 0.20,
 	position_spawner = position_spawner_leftright(bounds, 5.0),
 	velocity_spawner = velocity_spawner_angular(4.0, -pi/6, +pi/6),
 	max_velocity = 4.0,
-	#walls = crosswalls(bounds, 2.0, 2.0),
-	walls = SVector(Wall((bounds.x1, bounds.y1+1), (bounds.x2, bounds.y1+1))),
+	walls = crosswalls(bounds, 2.0, 2.0),
+	#walls = SVector(Wall((bounds.x1, bounds.y1+1), (bounds.x2, bounds.y1+1))),
 )
-sim = simulate(params, animation_path="anim.mkv", frameskip=25)
+sim = simulate(params, animation_path="anim.mkv", frameskip=20)
 #Profile.clear_malloc_data() # reset profiler stats after one run
 #animate_trajectories(sim; path="anim.mkv", frameskip=10)
 #write_trajectories(sim, "trajectories.dat")
