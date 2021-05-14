@@ -99,7 +99,6 @@ function signed_distance_from_line(p1::Tuple{Float64, Float64}, p2::Tuple{Float6
 	return dot(p .- closest_point_on_line(p1, p2, p), n)
 end
 
-# TODO: make more efficient?
 function scatter(pos::Tuple{Float64, Float64}, vel::Tuple{Float64, Float64}, wall::Wall, radius::Float64)
 	dot1 = dot(pos .- wall.p1, wall.p2 .- wall.p1) # check if inside wall endpoints
 	dot2 = dot(pos .- wall.p2, wall.p1 .- wall.p2)
@@ -121,7 +120,7 @@ function scatter_wall(pos, vel, radius)
 end
 
 function simulate(params::Parameters; sample=false, write_trajectories=false, animation_path="", frameskip=1, anim_t1=0, anim_t2=params.T, grid=false)
-    dt = 0.1 * params.radius / params.max_velocity # 0.7 safety factor # 1.0 would mean particle centers could overlap in one step
+    dt = 0.5 * params.radius / params.max_velocity # 0.8 safety factor # 1.0 would mean particle centers could overlap in one step
     times = 0:dt:params.T
     NT = length(times)
     
@@ -356,52 +355,6 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
 
-#= TODO: remove or update with latest changes
-function animate_trajectories(sim::Simulation; t1=0, t2=sim.times[end], path="", frameskip=1)
-	# TODO: force clear, new figure or something?
-
-	# find closest indices in times-array corresponding to t1 and t2
-	f1 = findmin(abs.(sim.times .- t1))[2]
-	f2 = findmin(abs.(sim.times .- t2))[2]
-	frames = f1:frameskip:f2
-	nf = length(frames)
-
-	figure = Figure(resolution=(600*sim.params.width/sim.params.height, 600))
-	axis = Axis(figure[1,1], 
-		xlabel="W = $(sim.params.width)",   xminorticks=IntervalsBetween(sim.ncellsx), xminorgridvisible=true,
-		ylabel="H = $(sim.params.height)", yminorticks=IntervalsBetween(sim.ncellsy), yminorgridvisible=true,
-	)
-	axis.xticks = [-sim.params.width/2, +sim.params.width/2]
-	axis.yticks = [0, +sim.params.height]
-	hidexdecorations!(axis, label=false, minorgrid=false)
-	hideydecorations!(axis, label=false, minorgrid=false)
-	xlims!(axis, -sim.params.width/2, +sim.params.width/2)
-	ylims!(axis, 0, +sim.params.height)
-
-	positions = Node(sim.positions[:,1])
-	scatter!(axis, positions, markersize=2*sim.params.radius, markerspace=AbstractPlotting.SceneSpace, color=:red)
-
-	fps = Int(round(nf / (t2 - t1))) # make duration equal to simulation time in seconds
-	record(figure, path, framerate=fps) do io
-		for f in 1:nf
-			print("\rAnimating frame $f / $nf ...")
-			positions[] = sim.positions[:,frames[f]]
-
-			nalive = sum(sim.alive[:,frames[f]])
-			t2 = round(sim.times[end], digits=1)
-			t = round(sim.times[frames[f]], digits=1)
-			R = sim.params.radius
-			S = sim.params.spawn_radius
-			axis.title = "N = $nalive        t = $t / $t2        R = $R        S = $S"
-
-			recordframe!(io)
-		end
-	end
-	println() # finish progress printing
-	return figure
-end
-=#
-
 #= TODO: needs update with newest changes
 function plot_trajectories(sim, which)
 	plot()
@@ -455,28 +408,58 @@ function crosswalls(bounds::Rectangle, wx::Float64, wy::Float64)
 	)
 end
 
-function position_spawner_leftright(bounds::Rectangle, height::Float64)
-	return (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? bounds.x1 : bounds.x2, bounds.y1 + height*rand())
+function position_spawner_leftright(bounds::Rectangle, y1::Float64, y2::Float64)
+	return (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? bounds.x1 : bounds.x2, y1+(y2-y1)*rand())
 end
 
 function velocity_spawner_angular(magnitude::Float64, ang1::Float64, ang2::Float64)
 	return (p::Parameters, n::Int, t::Float64) -> (ang = ang1 + (ang2-ang1)*rand() + pi*iseven(n); (4*cos(ang), 4*sin(ang)))
 end
 
-bounds = Rectangle(-20.0, -20.0, +20.0, +20.0)
-params = Parameters(
-	N = 40000,
-	T = 20.0,
-	bounds = bounds,
-	radius = 0.05,
-	spawn_radius = 0.10,
-	position_spawner = position_spawner_leftright(bounds, 5.0),
-	velocity_spawner = velocity_spawner_angular(4.0, -pi/6, +pi/6),
-	max_velocity = 4.0,
-	#walls = crosswalls(bounds, 2.0, 2.0),
-	walls = SVector(Wall((bounds.x1, bounds.y1), (bounds.x2, bounds.y1))),
-)
-sim = simulate(params, animation_path="anim.mkv", frameskip=20, grid=false)
+function params_bottomwall(spawn_radius_mult::Int, halfangdeg::Int)
+	bounds = Rectangle(-30, 0, +30, 60)
+	radius = 0.1
+	return Parameters(
+		N = 35000,
+		T = 50.0,
+		bounds = bounds,
+		radius = radius,
+		spawn_radius = spawn_radius_mult * radius,
+		position_spawner = position_spawner_leftright(bounds, 0.0, 5.0),
+		velocity_spawner = velocity_spawner_angular(4.0, -deg2rad(halfangdeg), +deg2rad(halfangdeg)),
+		max_velocity = 4.0,
+		walls = SVector(Wall((bounds.x1, bounds.y1), (bounds.x2, bounds.y1))),
+	), "anim_$(halfangdeg)deg_$(spawn_radius_mult)sep.mkv"
+end
+
+function params_cross()
+	bounds = Rectangle(-30, -30, +30, +30)
+	radius = 0.5
+	return Parameters(
+		N = 5000,
+		T = 50.0,
+		bounds = bounds,
+		radius = radius,
+		spawn_radius = 2 * radius,
+		position_spawner = position_spawner_leftright(bounds, -2.0, +2.0),
+		velocity_spawner = velocity_spawner_angular(4.0, -deg2rad(0), +deg2rad(0)),
+		max_velocity = 4.0,
+		walls = crosswalls(bounds, 5.0, 5.0),
+	), "anim.mkv"
+end
+
+#=
+for halfangdeg in [30, 40, 50]
+	for spawn_radius_mult in [1, 2]
+		params, path = params_bottomwall(spawn_radius_mult, halfangdeg)
+		sim = simulate(params, animation_path=path, frameskip=2, grid=false)
+	end
+end
+=#
+
+params, path = params_cross()
+sim = simulate(params, animation_path=path, frameskip=1, grid=false)
+
 #Profile.clear_malloc_data() # reset profiler stats after one run
 #animate_trajectories(sim; path="anim.mkv", frameskip=10)
 #write_trajectories(sim, "trajectories.dat")
