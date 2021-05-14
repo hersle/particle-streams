@@ -100,15 +100,12 @@ function signed_distance_from_line(p1::Tuple{Float64, Float64}, p2::Tuple{Float6
 end
 
 # TODO: make more efficient?
-function scatter(pos::Tuple{Float64, Float64}, vel::Tuple{Float64, Float64}, wall::Wall, lastpos::Tuple{Float64, Float64}, radius::Float64)
-	if dot(pos .- wall.p1, wall.p2 .- wall.p1) < 0 || dot(pos .- wall.p2, wall.p1 .- wall.p2) < 0
-		return vel, false
-	end
-
+function scatter(pos::Tuple{Float64, Float64}, vel::Tuple{Float64, Float64}, wall::Wall, radius::Float64)
+	dot1 = dot(pos .- wall.p1, wall.p2 .- wall.p1) # check if inside wall endpoints
+	dot2 = dot(pos .- wall.p2, wall.p1 .- wall.p2)
 	sdist = signed_distance_from_line(wall.p1, wall.p2, wall.n, pos)
-	lastsdist = signed_distance_from_line(wall.p1, wall.p2, wall.n, lastpos)
 	wallvel = dot(vel, wall.n) # velocity towards wall
-	if sdist < radius && lastsdist >= radius && wallvel < 0
+	if dot1 >= 0 && dot2 >= 0 && sdist <= radius && wallvel <= 0
 		return vel .- wall.n .* (2*wallvel), true
 	else
 		return vel, false
@@ -291,7 +288,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 
 				# particle - wall interactions
 				for wall in params.walls
-					vel1, scattered = scatter(pos1, vel1, wall, lastpos, params.radius)
+					vel1, scattered = scatter(pos1, vel1, wall, params.radius)
 					velocities[n1] = vel1
 					has_scattered[n1] = has_scattered[n1] || scattered
 				end
