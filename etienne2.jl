@@ -138,6 +138,8 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 	velocities_samples = Array{Tuple{Float64, Float64}, 2}(undef, sample_size)
 	alive_samples = Array{Bool, 2}(undef, sample_size)
 
+	has_scattered = Array{Bool}(undef, params.N) # whether a particle has scattered the last time step
+
 	# aim for 1 particle in each cell, so one particle can be in at most 4 cells
 	max_radius = max(params.radius, params.spawn_radius)
 	min_radius = min(params.radius, params.spawn_radius)
@@ -240,6 +242,8 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 		# kill dead particles and (try to) respawn them
 		print("\rSimulating time step $iter / $NT ...")
 
+		fill!(has_scattered, false)
+
 		for n1 in 1:params.N
 			if alive[n1] && out_of_bounds(params.bounds, positions[n1])
 				kill_particle(n1, iter)
@@ -268,8 +272,6 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 				rempart(n1) # remove from current cell (based on prev pos)
 				addpart(n1) # add to next cell (based on current pos)
 
-				has_scattered = false
-
 				# particle - particle interactions
 				pos1, vel1 = positions[n1], velocities[n1]
 				cx1, cy1, cx2, cy2 = pos2cells(pos1, params.bounds, ncellsx, ncellsy)
@@ -281,7 +283,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 							if alive[n2] && n2 > n1
 								vel1, vel2, scattered = scatter_particles(pos1, vel1, pos2, vel2, params.radius) # velocities[n1], velocities[n2] = scatter_particles() causes errors!
 								velocities[n1], velocities[n2] = vel1, vel2
-								has_scattered = has_scattered || scattered
+								has_scattered[n1] = has_scattered[n1] || scattered
 							end
 						end
 					end
@@ -291,10 +293,10 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 				for wall in params.walls
 					vel1, scattered = scatter(pos1, vel1, wall, lastpos, params.radius)
 					velocities[n1] = vel1
-					has_scattered = has_scattered || scattered
+					has_scattered[n1] = has_scattered[n1] || scattered
 				end
 
-				if has_scattered && write_trajectories
+				if has_scattered[n1] && write_trajectories
 					log_trajectory(n1, iter) # log trajectory only when scattering
 				end
 			end
