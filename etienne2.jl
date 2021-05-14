@@ -80,10 +80,10 @@ function pos2cells(pos, rect::Rectangle, ncellsx, ncellsy)
 end
 
 function scatter_particles(pos1, vel1, pos2, vel2, radius)
-	# TODO: normalize velocity, enforce its magnitude, prevent bugs if particles overlap partly when colliding?
 	r = norm(pos2 .- pos1)
 	if r < 2*radius && dot(vel2.-vel1,pos2.-pos1) <= 0
 		dvel1 = dot(vel1.-vel2,pos1.-pos2) / (r*r) .* (pos1 .- pos2)
+		#println("$(norm(vel1)^2 + norm(vel2)^2 - norm(vel1 .- dvel1)^2 - norm(vel2 .+ dvel1)^2)") # v1^2 + v2^2 is conserved (verify by uncommenting)
 		vel1, vel2 = vel1 .- dvel1, vel2 .+ dvel1
 		return vel1, vel2, true
 	else
