@@ -247,7 +247,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 			if !alive[n1]
 				pos = params.position_spawner(params, n1, times[iter])
 				if position_is_available(pos)
-					vel = params.velocity_spawner(params, n1, times[iter])
+					vel = params.velocity_spawner(params, n1, times[iter], pos)
 					@assert dot(vel, vel) <= params.max_velocity^2+1e-10 "Spawned particle with speed $(norm(vel)) > $(params.max_velocity) = max_velocity"
 					spawn_particle(n1, iter, pos, vel)
 				end
@@ -304,7 +304,7 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 			step(iter)
 		end
 	else
-		figure = Figure(resolution=(600*(params.bounds.x2-params.bounds.x1)/(params.bounds.y2-params.bounds.y1), 600))
+		figure = Figure(resolution=(1000*(params.bounds.x2-params.bounds.x1)/(params.bounds.y2-params.bounds.y1), 1000))
 		axis = Axis(figure[1,1], 
 			xlabel="W = $(params.bounds.x2-params.bounds.x1)", xminorticks=IntervalsBetween(ncellsx), xminorgridvisible=true,
 			ylabel="H = $(params.bounds.y2-params.bounds.y1)", yminorticks=IntervalsBetween(ncellsy), yminorgridvisible=true,
@@ -413,7 +413,7 @@ function position_spawner_leftright(bounds::Rectangle, y1::Float64, y2::Float64)
 end
 
 function velocity_spawner_angular(magnitude::Float64, ang1::Float64, ang2::Float64)
-	return (p::Parameters, n::Int, t::Float64) -> (ang = ang1 + (ang2-ang1)*rand() + pi*iseven(n); (magnitude*cos(ang), magnitude*sin(ang)))
+	return (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (ang = ang1 + (ang2-ang1)*rand() + pi*iseven(n); (magnitude*cos(ang), magnitude*sin(ang)))
 end
 
 function params_bottomwall(spawn_radius_mult::Int, halfangdeg::Int)
@@ -432,21 +432,48 @@ function params_bottomwall(spawn_radius_mult::Int, halfangdeg::Int)
 	), "anim_$(lpad(halfangdeg, 2, "0"))deg_$(spawn_radius_mult)sep.mkv"
 end
 
-function params_cross(crosswidth::Int, spawn_radius_mult_x10::Int, halfangdeg::Int)
-	bounds = Rectangle(-35, -60, +35, +60)
+function params_cross(crosswidth::Int, spawn_radius_mult_x10::Int, halfangdeg::Int, velocity::Int)
+	bounds = Rectangle(-50, -50, +50, +50)
 	radius = 0.1
-	velocity = 4.0
 	return Parameters(
-		N = 100000,
+		N = 150000,
 		T = 50.0,
 		bounds = bounds,
 		radius = radius,
 		spawn_radius = spawn_radius_mult_x10/10 * radius,
 		position_spawner = position_spawner_leftright(bounds, -crosswidth/2 + radius, +crosswidth/2 - radius),
-		velocity_spawner = velocity_spawner_angular(velocity, -deg2rad(halfangdeg), +deg2rad(halfangdeg)),
-		max_velocity = velocity,
+		velocity_spawner = velocity_spawner_angular(Float64(velocity), -deg2rad(halfangdeg), +deg2rad(halfangdeg)),
+		max_velocity = Float64(velocity),
 		walls = crosswalls(bounds, Float64(crosswidth), Float64(crosswidth)),
-	), "anim_cross$(crosswidth)_sep$(lpad(spawn_radius_mult_x10, 2, "0"))_deg$(lpad(halfangdeg, 2, "0")).mkv"
+	), "anim_cross$(crosswidth)_sep$(lpad(spawn_radius_mult_x10, 2, "0"))_deg$(lpad(halfangdeg, 2, "0"))_vel$(velocity).mkv"
+end
+
+function simulate_cross(crosswidth::Int, spawn_radius_mult_x10::Int, halfangdeg::Int, frameskip=1; record=false)
+	params, path = params_cross(crosswidth, spawn_radius_mult_x10, halfangdeg, 4)
+	path = record ? path : ""
+	simulate(params, animation_path=path, frameskip=frameskip)
+end
+
+
+function simulate_cross_flipcurvature(crosswidth::Int, spawn_radius_mult_x10::Int, halfangdeg::Int, frameskip=1; record=false)
+	bounds = Rectangle(-50, -50, +50, +50)
+	radius = 0.1
+	halfang = Float64(deg2rad(halfangdeg))
+	velocity = 4.0
+	symmetric_polynomial(c::Float64, w::Float64, y::Float64, p::Int) = (1 - (abs(y)/(w/2))^p)
+	params = Parameters(
+		N = 40000,
+		T = 50.0,
+		bounds = bounds,
+		radius = radius,
+		spawn_radius = spawn_radius_mult_x10/10 * radius,
+		position_spawner = position_spawner_leftright(bounds, -crosswidth/2 + radius, +crosswidth/2 - radius),
+		velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; modhalfang=1.0-halfang*symmetric_polynomial(0.0, Float64(crosswidth), y, 1); ang = -modhalfang + 2*modhalfang*rand() + pi*iseven(n); velocity .* (cos(ang), sin(ang))),
+		max_velocity = Float64(velocity),
+		walls = crosswalls(bounds, Float64(crosswidth), Float64(crosswidth)),
+	)
+	path = "anim_cross$(crosswidth)_sep$(lpad(spawn_radius_mult_x10, 2, "0"))_deg$(lpad(halfangdeg, 2, "0")).mkv"
+	simulate(params, animation_path=path, frameskip=4)
 end
 
 #=
@@ -458,12 +485,22 @@ for halfangdeg in [30, 40, 50]
 end
 =#
 
-for halfangdeg in [0, 10, 20]
-	for spawn_radius_mult_x10 in [15, 20, 25]
-		params, path = params_cross(40, spawn_radius_mult_x10, halfangdeg)
+#=
+for halfangdeg in [0, 20, 40]
+	for spawn_radius_mult_x10 in [10, 15, 20]
+		params, path = params_cross(25, spawn_radius_mult_x10, halfangdeg, 4)
 		sim = simulate(params, animation_path=path, frameskip=2, grid=false)
 	end
 end
+=#
+
+# See pattern clearly:
+#simulate_cross(25, 10, 0, 4, record=true)
+#simulate_cross(25, 15, 0, 4, record=true)
+#simulate_cross(25, 20, 0, 4, record=true)
+#simulate_cross(25, 25, 0, 4, record=true)
+
+simulate_cross_flipcurvature(25, 20, 40)
 
 #params, path = params_cross(20, 10, 5)
 bounds = Rectangle(0, 0, 10, 10)
@@ -478,7 +515,7 @@ params = Parameters(
 	max_velocity = 3.0,
 	walls = SVector(Wall((bounds.x1, bounds.y1), (bounds.x2, bounds.y1))),
 )
-simulate(params, frameskip=2, animation_path="anim.mkv", grid=true)
+#simulate(params, frameskip=2, animation_path="anim.mkv", grid=true)
 
 #Profile.clear_malloc_data() # reset profiler stats after one run
 #animate_trajectories(sim; path="anim.mkv", frameskip=10)
