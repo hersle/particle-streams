@@ -299,58 +299,65 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 		end
 	end
 
-	if animation_path == ""
-		for iter in 1:NT
-			step(iter)
-		end
-	else
-		figure = Figure(resolution=(1000*(params.bounds.x2-params.bounds.x1)/(params.bounds.y2-params.bounds.y1), 1000))
-		axis = Axis(figure[1,1], 
-			xlabel="W = $(params.bounds.x2-params.bounds.x1)", xminorticks=IntervalsBetween(ncellsx), xminorgridvisible=true,
-			ylabel="H = $(params.bounds.y2-params.bounds.y1)", yminorticks=IntervalsBetween(ncellsy), yminorgridvisible=true,
-		)
-		axis.xticks = [params.bounds.x1, params.bounds.x2]
-		axis.yticks = [params.bounds.y1, params.bounds.y2]
-		hidexdecorations!(axis, label=false, minorgrid=!grid)
-		hideydecorations!(axis, label=false, minorgrid=!grid)
-		xlims!(axis, params.bounds.x1, params.bounds.x2)
-		ylims!(axis, params.bounds.y1, params.bounds.y2)
+	figure = Figure(resolution=(1000*(params.bounds.x2-params.bounds.x1)/(params.bounds.y2-params.bounds.y1), 1000))
+	axis = Axis(figure[1,1], 
+		xlabel="W = $(params.bounds.x2-params.bounds.x1)", xminorticks=IntervalsBetween(ncellsx), xminorgridvisible=true,
+		ylabel="H = $(params.bounds.y2-params.bounds.y1)", yminorticks=IntervalsBetween(ncellsy), yminorgridvisible=true,
+	)
+	axis.xticks = [params.bounds.x1, params.bounds.x2]
+	axis.yticks = [params.bounds.y1, params.bounds.y2]
+	hidexdecorations!(axis, label=false, minorgrid=!grid)
+	hideydecorations!(axis, label=false, minorgrid=!grid)
+	xlims!(axis, params.bounds.x1, params.bounds.x2)
+	ylims!(axis, params.bounds.y1, params.bounds.y2)
 
-		animation_positions = Node(positions)
-		scatter!(axis, animation_positions, markersize=2*params.radius, markerspace=AbstractPlotting.SceneSpace, color=:black)
+	animation_positions = Node(positions)
+	scatter!(axis, animation_positions, markersize=2*params.radius, markerspace=AbstractPlotting.SceneSpace, color=:black)
 
-		# draw static geometry
-		wallpoints = Array{Tuple{Float64, Float64}}(undef, 0)
-		for wall in params.walls
-			push!(wallpoints, wall.p1)
-			push!(wallpoints, wall.p2)
-		end
-		linesegments!(axis, wallpoints)
+	# draw static geometry
+	wallpoints = Array{Tuple{Float64, Float64}}(undef, 0)
+	for wall in params.walls
+		push!(wallpoints, wall.p1)
+		push!(wallpoints, wall.p2)
+	end
+	linesegments!(axis, wallpoints)
 
-		# animation stuff
-		# find closest indices in times-array corresponding to t1 and t2
-		f1 = findmin(abs.(times .- anim_t1))[2]
-		f2 = findmin(abs.(times .- anim_t2))[2]
-		frames = f1:frameskip:f2
-		fps = Int(round(length(frames) / (anim_t2 - anim_t1))) # make duration equal to simulation time in seconds
+	# animation stuff
+	# find closest indices in times-array corresponding to t1 and t2
+	f1 = findmin(abs.(times .- anim_t1))[2]
+	f2 = findmin(abs.(times .- anim_t2))[2]
+	frames = f1:frameskip:f2
+	fps = Int(round(length(frames) / (anim_t2 - anim_t1))) # make duration equal to simulation time in seconds
 
-		display(figure)
+	display(figure)
 
-		record(figure, animation_path, framerate=fps) do io
-			for iter in 1:NT
-				step(iter)
-				if iter in frames
-					animation_positions[] = positions
-					nalive = sum(alive)
-					t = round(times[iter], digits=1)
-					R = round(params.radius, digits=4)
-					S = round(params.spawn_radius, digits=4)
-					axis.title = "N = $nalive   t = $t   R = $R   S = $S"
-					recordframe!(io)
-				end
+	function animation_step(iter::Int, io)
+		step(iter)
+		if iter in frames
+			animation_positions[] = positions
+			nalive = sum(alive)
+			t = round(times[iter], digits=1)
+			R = round(params.radius, digits=4)
+			S = round(params.spawn_radius, digits=4)
+			axis.title = "N = $nalive   t = $t   R = $R   S = $S"
+			if io != nothing
+				recordframe!(io)
 			end
 		end
 	end
+
+	if animation_path == ""
+		for iter in 1:NT
+			animation_step(iter, nothing)
+		end
+	else
+		record(figure, animation_path, framerate=fps) do io
+			for iter in 1:NT
+				animation_step(iter, io)
+			end
+		end
+	end
+
 	println() # finish progress printing
     return Simulation(params, times, positions_samples, velocities_samples, alive_samples, trajectories, ncellsx, ncellsy)
 end
