@@ -152,6 +152,8 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 	cell2part = Array{Tuple{Int, Int}, 3}(undef, ncellsx, ncellsy, max_parts_per_cell) # (cx, cy, ci) -> (particle id, cell #1-4)
 	part2cell = Array{Tuple{Int, Int, Int}, 2}(undef, params.N, 4) # (particle id, cell #1-4) -> (cx, cy, ci)
 
+	animation_path_prefix = "/home/herman/Videos/particle_collisions/"
+	animation_path = animation_path_prefix * animation_path
 	println("Write trajectories:  $write_trajectories")
 	println("Write animation:     $animation_path")
 	println("Number of cells:     ($ncellsx, $ncellsy)")
@@ -351,6 +353,8 @@ function simulate(params::Parameters; sample=false, write_trajectories=false, an
 			animation_step(iter, nothing)
 		end
 	else
+		dirname, filename = Base.Filesystem.splitdir(animation_path)
+		Base.Filesystem.mkpath(dirname)
 		record(figure, animation_path, framerate=fps) do io
 			for iter in 1:NT
 				animation_step(iter, io)
@@ -462,24 +466,29 @@ function simulate_cross(crosswidth::Int, spawn_radius_mult_x10::Int, halfangdeg:
 end
 
 
-function simulate_cross_flipcurvature(crosswidth::Int, spawn_radius_mult_x10::Int, halfangdeg::Int, frameskip=1; record=false)
+function simulate_cross_flipcurvature(crosswidth::Int, spawn_radius_mult_x10::Int, halfang1deg::Int, halfang2deg::Int, frameskip=1; record=false)
 	bounds = Rectangle(-50, -50, +50, +50)
 	radius = 0.1
-	halfang = Float64(deg2rad(halfangdeg))
+	halfang1 = Float64(deg2rad(halfang1deg))
+	halfang2 = Float64(deg2rad(halfang2deg))
 	velocity = 4.0
 	symmetric_polynomial(c::Float64, w::Float64, y::Float64, p::Int) = (1 - (abs(y)/(w/2))^p)
 	params = Parameters(
 		N = 40000,
-		T = 50.0,
+		T = 10.0,
 		bounds = bounds,
 		radius = radius,
 		spawn_radius = spawn_radius_mult_x10/10 * radius,
 		position_spawner = position_spawner_leftright(bounds, -crosswidth/2 + radius, +crosswidth/2 - radius),
-		velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; modhalfang=1.0-halfang*symmetric_polynomial(0.0, Float64(crosswidth), y, 1); ang = -modhalfang + 2*modhalfang*rand() + pi*iseven(n); velocity .* (cos(ang), sin(ang))),
+		#velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; ang = -halfang + 2*halfang*rand() + pi*iseven(n); velocity .* (cos(ang), sin(ang))),
+		#velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; modhalfang=1.0-halfang*symmetric_polynomial(0.0, Float64(crosswidth), y, 1); ang = -modhalfang + 2*modhalfang*rand() + pi*iseven(n); velocity .* (cos(ang), sin(ang))),
+		#velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; halfang = halfang1+abs(y)/(Float64(crosswidth)/2)*(halfang2-halfang1); ang=-halfang+rand()*2*halfang+pi*iseven(n); velocity .* (cos(ang), sin(ang))),
+		#velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; halfang = halfang1 + (1-symmetric_polynomial(0.0, Float64(crosswidth), y, 1))*(halfang2-halfang1); ang=-halfang+rand()*2*halfang+pi*iseven(n); velocity .* (cos(ang), sin(ang))),
+		velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; halfang = 0+y/(Float64(crosswidth)/2)*halfang2; ang=sign(pos[1])*rand()*halfang + pi*iseven(n); velocity .* (cos(ang), sin(ang))),
 		max_velocity = Float64(velocity),
 		walls = crosswalls(bounds, Float64(crosswidth), Float64(crosswidth)),
 	)
-	path = "anim_cross$(crosswidth)_sep$(lpad(spawn_radius_mult_x10, 2, "0"))_deg$(lpad(halfangdeg, 2, "0")).mkv"
+	path = record ? "anim_cross$(crosswidth)_sep$(lpad(spawn_radius_mult_x10, 2, "0"))_deg$(lpad(halfang1deg, 2, "0"))to$(lpad(halfang2deg, 2, "0")).mkv" : ""
 	simulate(params, animation_path=path, frameskip=4)
 end
 
@@ -507,7 +516,9 @@ end
 #simulate_cross(25, 20, 0, 4, record=true)
 #simulate_cross(25, 25, 0, 4, record=true)
 
-simulate_cross_flipcurvature(25, 20, 40)
+simulate_cross_flipcurvature(25, 20, 0, 20, record=true)
+simulate_cross_flipcurvature(25, 25, 0, 20, record=true)
+simulate_cross_flipcurvature(25, 30, 0, 20, record=true)
 
 #params, path = params_cross(20, 10, 5)
 bounds = Rectangle(0, 0, 10, 10)
