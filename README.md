@@ -4,6 +4,13 @@
 * Every cell remembers every particle it contains, and every particle remembers which cells it is in.
 * Only nearby particles from adjacent cells are collision checked, allowing real-time simulation of 10000s of particles. 
 
+## Usage instructions
+
+1. Install [Julia](https://julialang.org/).
+2. Run `julia`, hit `]` to enter the package manager, then `add GLMakie` (for real-time visualization) and `add StaticArrays` (for efficient arrays).
+3. Set the desired simulation parameters at the bottom of `particle-streams.jl`.
+4. Run `particle-streams.jl` to simluate in real-time. To avoid recompilation every time, launch `julia` first, then `include("particle-streams.jl")` after changing parameters to re-simulate without re-compiling.
+
 ### Basic example
 
 https://user-images.githubusercontent.com/10370860/121208094-193e2300-c87a-11eb-9627-9c2f3b624532.mp4
