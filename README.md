@@ -13,6 +13,10 @@
 5. If the simulation finishes, it is also saved as a video to the path given to `simulate()` with the parameter `animation_path` (e.g. `animation.mkv`).
 6. If desired, run `upload.sh` to convert all `.mkv` videos (from the program) recursively from the current working directory to web-friendly `.mp4` files that can be watched on a wider variety of devices.
 
+## Examples
+
+For more sophisticated examples and larger simulation series with incremental parameter changes, visit [folk.ntnu.no/hermasl/particle_collisions/](https://folk.ntnu.no/hermasl/particle_collisions/) (link can die at any time).
+
 ### Basic example
 
 https://user-images.githubusercontent.com/10370860/121208094-193e2300-c87a-11eb-9627-9c2f3b624532.mp4
