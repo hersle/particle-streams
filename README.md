@@ -10,6 +10,8 @@
 2. Run `julia`, hit `]` to enter the package manager, then `add GLMakie` (for real-time visualization) and `add StaticArrays` (for efficient arrays).
 3. Set the desired simulation parameters at the bottom of `particle-streams.jl`.
 4. Run `particle-streams.jl` to simluate in real-time. To avoid recompilation every time, launch `julia` first, then `include("particle-streams.jl")` after changing parameters to re-simulate without re-compiling.
+5. If the simulation finishes, it is also saved as a video to the path given to `simulate()` with the parameter `animation_path` (e.g. `animation.mkv`).
+6. If desired, run `upload.sh` to convert all `.mkv` videos (from the program) recursively from the current working directory to web-friendly `.mp4` files that can be watched on a wider variety of devices.
 
 ### Basic example
 
