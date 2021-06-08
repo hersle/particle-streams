@@ -400,9 +400,8 @@ function write_trajectories(sim, path)
 end
 
 # TODO: is it randomized spawning position or velocity that causes symmetry breaking?
-# TODO: animate underway (i.e. do not store tons of positions)
 
-function crosswalls(bounds::Rectangle, wx::Float64, wy::Float64)
+function crosswalls(bounds::Rectangle, wx::Float64, wy::Float64=wx)
 	x1, x4 = bounds.x1, bounds.x2
 	x2, x3 = (x1+x4)/2 - wx/2, (x1+x4)/2 + wx/2
 	y1, y4 = bounds.y1, bounds.y2
@@ -419,122 +418,22 @@ function crosswalls(bounds::Rectangle, wx::Float64, wy::Float64)
 	)
 end
 
-function position_spawner_leftright(bounds::Rectangle, y1::Float64, y2::Float64)
-	return (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? bounds.x1 : bounds.x2, y1+(y2-y1)*rand())
-end
-
-function velocity_spawner_angular(magnitude::Float64, ang1::Float64, ang2::Float64)
-	return (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (ang = ang1 + (ang2-ang1)*rand() + pi*iseven(n); (magnitude*cos(ang), magnitude*sin(ang)))
-end
-
-function params_bottomwall(spawn_radius_mult::Int, halfangdeg::Int)
-	bounds = Rectangle(-30, 0, +30, 60)
-	radius = 0.1
-	return Parameters(
-		N = 35000,
-		T = 50.0,
-		bounds = bounds,
-		radius = radius,
-		spawn_radius = spawn_radius_mult * radius,
-		position_spawner = position_spawner_leftright(bounds, 0.0, 5.0),
-		velocity_spawner = velocity_spawner_angular(4.0, -deg2rad(halfangdeg), +deg2rad(halfangdeg)),
-		max_velocity = 4.0,
-		walls = SVector(Wall((bounds.x1, bounds.y1), (bounds.x2, bounds.y1))),
-	), "anim_$(lpad(halfangdeg, 2, "0"))deg_$(spawn_radius_mult)sep.mkv"
-end
-
-function params_cross(crosswidth::Int, spawn_radius_mult_x10::Int, halfangdeg::Int, velocity::Int)
+function main()
+	radius = 0.5
+	crosswidth = 25.0
 	bounds = Rectangle(-50, -50, +50, +50)
-	radius = 0.1
-	return Parameters(
-		N = 150000,
-		T = 50.0,
-		bounds = bounds,
-		radius = radius,
-		spawn_radius = spawn_radius_mult_x10/10 * radius,
-		position_spawner = position_spawner_leftright(bounds, -crosswidth/2 + radius, +crosswidth/2 - radius),
-		velocity_spawner = velocity_spawner_angular(Float64(velocity), -deg2rad(halfangdeg), +deg2rad(halfangdeg)),
-		max_velocity = Float64(velocity),
-		walls = crosswalls(bounds, Float64(crosswidth), Float64(crosswidth)),
-	), "anim_cross$(crosswidth)_sep$(lpad(spawn_radius_mult_x10, 2, "0"))_deg$(lpad(halfangdeg, 2, "0"))_vel$(velocity).mkv"
-end
-
-function simulate_cross(crosswidth::Int, spawn_radius_mult_x10::Int, halfangdeg::Int, frameskip=1; record=false)
-	params, path = params_cross(crosswidth, spawn_radius_mult_x10, halfangdeg, 4)
-	path = record ? path : ""
-	simulate(params, animation_path=path, frameskip=frameskip)
-end
-
-
-function simulate_cross_flipcurvature(crosswidth::Int, spawn_radius_mult_x10::Int, halfang1deg::Int, halfang2deg::Int, frameskip=1; record=false)
-	bounds = Rectangle(-50, -50, +50, +50)
-	radius = 0.1
-	halfang1 = Float64(deg2rad(halfang1deg))
-	halfang2 = Float64(deg2rad(halfang2deg))
-	velocity = 4.0
-	symmetric_polynomial(c::Float64, w::Float64, y::Float64, p::Int) = (1 - (abs(y)/(w/2))^p)
 	params = Parameters(
 		N = 40000,
-		T = 10.0,
+		T = 100.0,
 		bounds = bounds,
 		radius = radius,
-		spawn_radius = spawn_radius_mult_x10/10 * radius,
-		position_spawner = position_spawner_leftright(bounds, -crosswidth/2 + radius, +crosswidth/2 - radius),
-		#velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; ang = -halfang + 2*halfang*rand() + pi*iseven(n); velocity .* (cos(ang), sin(ang))),
-		#velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; modhalfang=1.0-halfang*symmetric_polynomial(0.0, Float64(crosswidth), y, 1); ang = -modhalfang + 2*modhalfang*rand() + pi*iseven(n); velocity .* (cos(ang), sin(ang))),
-		#velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; halfang = halfang1+abs(y)/(Float64(crosswidth)/2)*(halfang2-halfang1); ang=-halfang+rand()*2*halfang+pi*iseven(n); velocity .* (cos(ang), sin(ang))),
-		#velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; halfang = halfang1 + (1-symmetric_polynomial(0.0, Float64(crosswidth), y, 1))*(halfang2-halfang1); ang=-halfang+rand()*2*halfang+pi*iseven(n); velocity .* (cos(ang), sin(ang))),
-		velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; halfang = 0+y/(Float64(crosswidth)/2)*halfang2; ang=sign(pos[1])*rand()*halfang + pi*iseven(n); velocity .* (cos(ang), sin(ang))),
-		max_velocity = Float64(velocity),
-		walls = crosswalls(bounds, Float64(crosswidth), Float64(crosswidth)),
+		spawn_radius = 1.0 * radius,
+		position_spawner = (p::Parameters, n::Int, t::Float64) -> (isodd(n) ? bounds.x1 : bounds.x2, (-crosswidth/2+radius)+(crosswidth-2*radius)*rand()),
+		velocity_spawner = (p::Parameters, n::Int, t::Float64, pos::Tuple{Float64, Float64}) -> (y = pos[2]; ang=-pi/6+rand()*2*pi/6 + pi*iseven(n); (3.5 + 1.0*rand()) .* (cos(ang), sin(ang))),
+		max_velocity = 4.5,
+		walls = crosswalls(bounds, crosswidth),
+		#walls = SVector(Wall((bounds.x1, bounds.y1), (bounds.x2, bounds.y1)))
 	)
-	path = record ? "anim_cross$(crosswidth)_sep$(lpad(spawn_radius_mult_x10, 2, "0"))_deg$(lpad(halfang1deg, 2, "0"))to$(lpad(halfang2deg, 2, "0")).mkv" : ""
-	simulate(params, animation_path=path, frameskip=4)
+	simulate(params, animation_path="animation.mkv", frameskip=4)
 end
-
-#=
-for halfangdeg in [30, 40, 50]
-	for spawn_radius_mult in [1, 2]
-		params, path = params_bottomwall(spawn_radius_mult, halfangdeg)
-		sim = simulate(params, animation_path=path, frameskip=2, grid=false)
-	end
-end
-=#
-
-#=
-for halfangdeg in [0, 20, 40]
-	for spawn_radius_mult_x10 in [10, 15, 20]
-		params, path = params_cross(25, spawn_radius_mult_x10, halfangdeg, 4)
-		sim = simulate(params, animation_path=path, frameskip=2, grid=false)
-	end
-end
-=#
-
-# See pattern clearly:
-#simulate_cross(25, 10, 0, 4, record=true)
-#simulate_cross(25, 15, 0, 4, record=true)
-#simulate_cross(25, 20, 0, 4, record=true)
-#simulate_cross(25, 25, 0, 4, record=true)
-
-simulate_cross_flipcurvature(25, 20, 0, 20, record=true)
-simulate_cross_flipcurvature(25, 25, 0, 20, record=true)
-simulate_cross_flipcurvature(25, 30, 0, 20, record=true)
-
-#params, path = params_cross(20, 10, 5)
-bounds = Rectangle(0, 0, 10, 10)
-params = Parameters(
-	N = 50000,
-	T = 50.0,
-	bounds = bounds,
-	radius = 0.2,
-	spawn_radius = 0.3,
-	position_spawner = position_spawner_leftright(bounds, 0.0, 3.0),
-	velocity_spawner = velocity_spawner_angular(1.0, -deg2rad(0), +deg2rad(0)),
-	max_velocity = 3.0,
-	walls = SVector(Wall((bounds.x1, bounds.y1), (bounds.x2, bounds.y1))),
-)
-#simulate(params, frameskip=2, animation_path="anim.mkv", grid=true)
-
-#Profile.clear_malloc_data() # reset profiler stats after one run
-#animate_trajectories(sim; path="anim.mkv", frameskip=10)
-#write_trajectories(sim, "trajectories.dat")
+main()
