@@ -18,4 +18,4 @@ for fmkv in $(find -name "*.mkv"); do
 	rm "$fmkv"
 done
 
-rsync -vtr . --include="*/" --include="*.mp4" --exclude="*" hermasl@login.stud.ntnu.no:public_html/particle_collisions
+# rsync -vtr . --include="*/" --include="*.mp4" --exclude="*" hermasl@login.stud.ntnu.no:public_html/particle_collisions # upload to web
