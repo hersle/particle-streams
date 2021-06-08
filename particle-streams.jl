@@ -1,7 +1,5 @@
 using LinearAlgebra
 using Printf
-using ProgressMeter
-using Profile
 using GLMakie
 using StaticArrays
 GLMakie.AbstractPlotting.inline!(false) # show window while animating
